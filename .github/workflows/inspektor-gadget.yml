@@ -39,11 +39,19 @@ jobs:
     - name: Build Inspektor Gadget
       run: |
         IMAGE_TAG=${{steps.publish-registry.outputs.snapshot-tag}} make kubectl-gadget
+        VERSION=${{ github.ref }}
 
         mkdir -p out/inspektor-gadget
         cp kubectl-gadget-* out/inspektor-gadget/
-
         tar --sort=name --owner=root:0 --group=root:0 -czf inspektor-gadget.tar.gz -C out .
+
+        # Prepare assets for release
+        tar --sort=name --owner=root:0 --group=root:0 \
+          -czf kubectl-gadget-linux-amd64.tar.gz \
+          kubectl-gadget-$VERSION-linux-amd64 LICENSE
+        tar --sort=name --owner=root:0 --group=root:0 \
+          -czf kubectl-gadget-darwin-amd64.tar.gz \
+          kubectl-gadget-$VERSION-darwin-amd64 LICENSE
 
     - name: Unit tests
       run: |
