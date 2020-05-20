@@ -20,21 +20,21 @@ jobs:
     - name: Check out code
       uses: actions/checkout@v1
 
-    - name: Build binaries for the gadget container image
-      run: |
-        make -C gadget-container gadget-container-deps
-
-    - name: Build gadget container and publish to Registry
-      id: publish-registry
-      uses: elgohr/Publish-Docker-Github-Action@2.8
-      with:
-        name: docker.io/kinvolk/gadget
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-        workdir: gadget-container
-        dockerfile: gadget.Dockerfile
-        snapshot: true
-        cache: ${{ github.event_name != 'schedule' }}
+#    - name: Build binaries for the gadget container image
+#      run: |
+#        make -C gadget-container gadget-container-deps
+#
+#    - name: Build gadget container and publish to Registry
+#      id: publish-registry
+#      uses: elgohr/Publish-Docker-Github-Action@2.8
+#      with:
+#        name: docker.io/kinvolk/gadget
+#        username: ${{ secrets.DOCKER_USERNAME }}
+#        password: ${{ secrets.DOCKER_PASSWORD }}
+#        workdir: gadget-container
+#        dockerfile: gadget.Dockerfile
+#        snapshot: true
+#        cache: ${{ github.event_name != 'schedule' }}
 
     - name: Build Inspektor Gadget
       run: |
@@ -80,6 +80,7 @@ jobs:
         release_name: Release ${{ github.ref }}
         draft: true
         prerelease: false
+
     - name: Upload Release Asset
       id: upload-release-asset
       uses: actions/upload-release-asset@v1.0.1
