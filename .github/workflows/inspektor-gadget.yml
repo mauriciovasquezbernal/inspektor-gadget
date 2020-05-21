@@ -20,21 +20,21 @@ jobs:
     - name: Check out code
       uses: actions/checkout@v1
 
-    - name: Build binaries for the gadget container image
-      run: |
-        make -C gadget-container gadget-container-deps
-
-    - name: Build gadget container and publish to Registry
-      id: publish-registry
-      uses: elgohr/Publish-Docker-Github-Action@2.8
-      with:
-        name: docker.io/kinvolk/gadget
-        username: ${{ secrets.DOCKER_USERNAME }}
-        password: ${{ secrets.DOCKER_PASSWORD }}
-        workdir: gadget-container
-        dockerfile: gadget.Dockerfile
-        snapshot: true
-        cache: ${{ github.event_name != 'schedule' }}
+#    - name: Build binaries for the gadget container image
+#      run: |
+#        make -C gadget-container gadget-container-deps
+#
+#    - name: Build gadget container and publish to Registry
+#      id: publish-registry
+#      uses: elgohr/Publish-Docker-Github-Action@2.8
+#      with:
+#        name: docker.io/kinvolk/gadget
+#        username: ${{ secrets.DOCKER_USERNAME }}
+#        password: ${{ secrets.DOCKER_PASSWORD }}
+#        workdir: gadget-container
+#        dockerfile: gadget.Dockerfile
+#        snapshot: true
+#        cache: ${{ github.event_name != 'schedule' }}
 
     - name: Build Inspektor Gadget
       run: |
@@ -45,15 +45,15 @@ jobs:
 
         tar --sort=name --owner=root:0 --group=root:0 -czf inspektor-gadget.tar.gz -C out .
 
-    - name: Unit tests
-      run: |
-        make test
-
-    - name: Smoke test build of the dev image for minikube
-      run: |
-        mkdir ../traceloop
-        touch ../traceloop/traceloop
-        MINIKUBE=true make -C gadget-container/ docker-gadget/minikube-build
+#    - name: Unit tests
+#      run: |
+#        make test
+#
+#    - name: Smoke test build of the dev image for minikube
+#      run: |
+#        mkdir ../traceloop
+#        touch ../traceloop/traceloop
+#        MINIKUBE=true make -C gadget-container/ docker-gadget/minikube-build
 
     - name: Upload Inspektor Gadget artifact
       uses: actions/upload-artifact@v1
