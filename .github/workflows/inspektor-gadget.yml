@@ -40,22 +40,17 @@ jobs:
       run: |
         IMAGE_TAG=${{steps.publish-registry.outputs.snapshot-tag}} make kubectl-gadget
 
-        # Prepare assets for release and artifact
+        # Prepare assets for release and actions artifacts
 
-        mkdir linux-amd64
-        cp kubectl-gadget-linux-amd64 linux-amd64/kubectl-gadget
-        cp LICENSE linux-amd64/
-        tar --sort=name --owner=root:0 --group=root:0 \
-          -czf kubectl-gadget-linux-amd64.tar.gz -C linux-amd64 \
-          kubectl-gadget LICENSE
-
-        mkdir darwin-amd64
-        cp kubectl-gadget-darwin-amd64 darwin-amd64/kubectl-gadget
-        cp LICENSE darwin-amd64/
-        tar --sort=name --owner=root:0 --group=root:0 \
-          -czf kubectl-gadget-darwin-amd64.tar.gz -C darwin-amd64 \
-          kubectl-gadget LICENSE
-
+        platforms="darwin-amd64 linux-amd64"
+        for platform in $platforms; do
+          mkdir $platform
+          cp kubectl-gadget-$platform $platform/kubectl-gadget
+          cp LICENSE $platform/
+          tar --sort=name --owner=root:0 --group=root:0 \
+            -czf inspektor-gadget-$platform.tar.gz -C $platform \
+            kubectl-gadget LICENSE
+        done
 
 #    - name: Unit tests
 #      run: |
@@ -70,14 +65,14 @@ jobs:
     - name: Upload linux-amd64 artifact
       uses: actions/upload-artifact@v1
       with:
-        name: kubectl-gadget-linux-amd64
-        path: kubectl-gadget-linux-amd64.tar.gz
+        name: inspektor-gadget-linux-amd64
+        path: inspektor-gadget-linux-amd64.tar.gz
 
     - name: Upload darwin-amd64 artifact
       uses: actions/upload-artifact@v1
       with:
-        name: kubectl-gadget-darwin-amd64
-        path: kubectl-gadget-darwin-amd64.tar.gz
+        name: inspektor-gadget-darwin-amd64
+        path: inspektor-gadget-darwin-amd64.tar.gz
 
     - name: Create Release
       id: create_release
@@ -99,8 +94,8 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: kubectl-gadget-linux-amd64.tar.gz
-        asset_name: kubectl-gadget-linux-amd64.tar.gz
+        asset_path: inspektor-gadget-linux-amd64.tar.gz
+        asset_name: inspektor-gadget-linux-amd64.tar.gz
         asset_content_type: application/gzip
 
     - name: Upload darwin-amd64 Release Asset
@@ -111,6 +106,6 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: kubectl-gadget-darwin-amd64.tar.gz
-        asset_name: kubectl-gadget-darwin-amd64.tar.gz
+        asset_path: inspektor-gadget-darwin-amd64.tar.gz
+        asset_name: inspektor-gadget-darwin-amd64.tar.gz
         asset_content_type: application/gzip

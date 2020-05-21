@@ -86,11 +86,11 @@ Inspektor Gadget needs some recent Linux features and modifications in Kubernete
 
 Install Inspektor Gadget (client-side):
 
+Use [krew](https://sigs.k8s.io/krew) plugin manager to install:
+
 ```
-$ wget https://github.com/kinvolk/inspektor-gadget/releases/download/v0.1.0-alpha.5/inspektor-gadget.tar.gz
-$ tar xvf inspektor-gadget.tar.gz
-$ sudo cp inspektor-gadget/inspektor-gadget /usr/local/bin/kubectl-gadget
-$ kubectl gadget version
+kubectl krew install gadget
+kubectl gadget --help
 ```
 
 Install Inspektor Gadget on Kubernetes:
@@ -99,7 +99,7 @@ Install Inspektor Gadget on Kubernetes:
 $ kubectl gadget deploy | kubectl apply -f -
 ```
 
-[Read the detailed install instructions](Documentation/install.md)
+Read the detailed [install instructions](Documentation/install.md) to find more information.
 
 ## Contributing
 

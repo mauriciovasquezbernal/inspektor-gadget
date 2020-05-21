@@ -1,37 +1,53 @@
 # Installation
 
-## Installation (client side)
+Inspektor Gadget is composed by a client `kubectl` plugin
+executed in the users' systems and a DaemonSet deployed in the cluster.
+
+## Installing kubectl-gadget
 
 Choose one way to install Inspektor Gadget.
 
-### Stable version
+### Using krew
+
+The [krew](https://sigs.k8s.io/krew) plugin manager is the recommented way to
+install `kubectl-gadget`. You can follow the
+[krew's quickstart](https://krew.sigs.k8s.io/docs/user-guide/quickstart/)
+to install it. Once you have installed it, you can install `kubectl-gadet`.
 
 ```
-$ wget https://github.com/kinvolk/inspektor-gadget/releases/download/v0.1.0-alpha.5/inspektor-gadget.tar.gz
-$ tar xvf inspektor-gadget.tar.gz
-$ sudo cp inspektor-gadget/inspektor-gadget /usr/local/bin/kubectl-gadget
+kubectl krew install gadget
+kubectl gadget --help
+```
+
+### Install a specific release
+
+Download the executable for a given release and platform from the
+[releases page](https://github.com/kinvolk/inspektor-gadget/releases/),
+uncompress and move the `kubectl-gadget` executable to your `PATH`.
+
+```
+$ wget https://github.com/kinvolk/inspektor-gadget/releases/download/v0.1.0-alpha.5/inspektor-gadget-linux-amd64.tar.gz
+$ tar xvf inspektor-gadget-linux-amd64.tar.gz
+$ sudo cp kubectl-gadget /usr/local/bin/
 $ kubectl gadget version
+$ kubectl gadget --help
 ```
 
-You can find other releases on [releases](https://github.com/kinvolk/inspektor-gadget/releases).
-
-### Latest version
-
-#### From a specific branch and commit
+### Download from Github Actions artifacts
 
 * Go to the [GitHub Actions page](https://github.com/kinvolk/inspektor-gadget/actions)
 * Select one successful build from the desired branch and commit
-* Download inspektor-gadget.zip:
+* Download the artifact for your platform:
   ![Download artifacts](github-actions-download-artifacts.png)
 * Finish the installation:
 
 ```
-$ unzip -p inspektor-gadget.zip | tar xvzf -
-$ sudo cp inspektor-gadget/kubectl-gadget-linux-amd64 /usr/local/bin/kubectl-gadget
+$ unzip -p inspektor-gadget-linux-amd64.zip | tar xvzf -
+$ sudo cp kubectl-gadget /usr/local/bin/
 $ kubectl gadget version
 ```
 
-#### From the sources
+### Compile from the sources
 
 ```
 $ git clone https://github.com/kinvolk/inspektor-gadget.git
@@ -55,7 +71,7 @@ See the [minikube](#Development-environment-on-minikube-for-the-traceloop-gadget
 section for a faster development cycle.
 
 
-## Installation (server side)
+## Installing in the cluster
 
 ### Quick installation
 
