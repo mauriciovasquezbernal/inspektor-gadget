@@ -28,13 +28,12 @@ jobs:
         username: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
         password: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
         dockerfile: gadget.Dockerfile
-        snapshot: true
         cache: ${{ github.event_name != 'schedule' }}
 
     - name: Build kubectl gadget Plugin
       env:
         CONTAINER_REPO: ${{ secrets.CONTAINER_REPO }}
-        IMAGE_TAG: ${{ steps.publish-registry.outputs.snapshot-tag }}
+        IMAGE_TAG: ${{ steps.publish-registry.outputs.tag }}
       run: |
         make kubectl-gadget
 
@@ -71,7 +70,7 @@ jobs:
     - name: Integration tests
       env:
         CONTAINER_REPO: ${{ secrets.CONTAINER_REPO }}
-        IMAGE_TAG: ${{ steps.publish-registry.outputs.snapshot-tag }}
+        IMAGE_TAG: ${{ steps.publish-registry.outputs.tag }}
       run: |
         echo "Using IMAGE_TAG=$IMAGE_TAG"
 
@@ -86,6 +85,7 @@ jobs:
         MINIKUBE: true
       run: |
         # Fake file just to test container building
+        mkdir -p gadget-container/bin/
         touch gadget-container/bin/traceloop
         make gadget-container-local
 
@@ -171,7 +171,7 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/v')
       env:
         CONTAINER_REPO: ${{ secrets.CONTAINER_REPO }}
-        IMAGE_TAG: ${{ steps.publish-registry.outputs.snapshot-tag }}
+        IMAGE_TAG: ${{ steps.publish-registry.outputs.tag }}
       run: |
         make -C integration push
 
