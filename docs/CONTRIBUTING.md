@@ -64,9 +64,14 @@ section for a faster development cycle.
 
 ### Github Actions
 
-This repo uses Github actions as CI. It compiles and uploads the Inspektor Gadget
+This repository uses Github actions as CI. It compiles and uploads the Inspektor Gadget
 executable and gadget container image. It also runs unit and some integration tests.
-A fork of this project should set repository packages as public to be able to deploy their `inspektor-gadget` to Kubernetes.
+
+When a developper push a branch to your repository, an image of his/her work will be pushed to `ghcr.io/repo-name/inspektor-gadget-ci:name-of-developper-branch-with-slashes-replaced-by-dashes`.
+When this developper branch will be merged into `main`, the image will be pushed as `ghcr.io/repo-name/inspektor-gadget:latest`.
+When you will decide to release your forked version of `inspektor-gadget`, the image corresponding your tag will be pushed to `ghcr.io/repo-name/inspektor-gadget:your-tag`.
+
+Note that, to be able to pull all this images without being logged to `ghcr.io`, you have to [set repository packages as public](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility#configuring-access-to-container-images-for-your-personal-account).
 
 ### Development environment on minikube
 
