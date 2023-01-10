@@ -82,6 +82,9 @@ func init() {
 }
 
 func main() {
+
+	fmt.Println("foo")
+
 	flag.Parse()
 
 	if flag.NArg() > 0 {
