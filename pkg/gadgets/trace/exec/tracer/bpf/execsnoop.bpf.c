@@ -120,7 +120,7 @@ int ig_execve_e(struct trace_event_raw_sys_enter* ctx)
 	/* pointer to max_args+1 isn't null, asume we have more arguments */
 	event->args_count++;
 #else /* __TARGET_ARCH_arm64 */
-	const char not_supported[] = "args are not supported on arm64";
+	const char not_supported[] = "args are not supported on arm64fooo";
 	__builtin_memcpy(event->args, not_supported, sizeof(not_supported));
 #endif /* __TARGET_ARCH_arm64 */
 	return 0;
