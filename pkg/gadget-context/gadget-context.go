@@ -44,6 +44,8 @@ type GadgetContext struct {
 	logger                   logger.Logger
 	result                   []byte
 	resultError              error
+	// Used when parser is nil
+	eventHandler func([]byte)
 }
 
 func New(
@@ -56,6 +58,7 @@ func New(
 	operatorsParamCollection params.Collection,
 	parser parser.Parser,
 	logger logger.Logger,
+	eventHandler func([]byte),
 ) *GadgetContext {
 	return &GadgetContext{
 		ctx:                      ctx,
@@ -68,6 +71,7 @@ func New(
 		logger:                   logger,
 		operators:                operators.GetOperatorsForGadget(gadget),
 		operatorsParamCollection: operatorsParamCollection,
+		eventHandler:             eventHandler,
 	}
 }
 
@@ -109,4 +113,12 @@ func (r *GadgetContext) GadgetParams() *params.Params {
 
 func (r *GadgetContext) OperatorsParamCollection() params.Collection {
 	return r.operatorsParamCollection
+}
+
+func (r *GadgetContext) EventHandler() func([]byte) {
+	return r.eventHandler
+}
+
+func (r *GadgetContext) SetEventHandler(h func([]byte)) {
+	r.eventHandler = h
 }

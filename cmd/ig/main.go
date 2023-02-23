@@ -30,6 +30,8 @@ import (
 
 	// Another blank import for the used operator
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/localmanager"
+
+	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/bpftrace"
 )
 
 func main() {

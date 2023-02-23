@@ -34,6 +34,7 @@ type GadgetContext interface {
 	RuntimeParams() *params.Params
 	GadgetParams() *params.Params
 	OperatorsParamCollection() params.Collection
+	EventHandler() func([]byte)
 }
 
 // Runtime is the interface for gadget runtimes. Runtimes are used to control the lifecycle of gadgets either locally

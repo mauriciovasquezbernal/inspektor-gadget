@@ -52,4 +52,6 @@ import (
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/trace/tcpconnect/tracer"
 
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/traceloop/tracer"
+
+	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/bpftrace"
 )

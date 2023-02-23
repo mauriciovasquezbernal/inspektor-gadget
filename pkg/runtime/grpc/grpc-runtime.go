@@ -339,6 +339,8 @@ func (r *Runtime) runGadget(gadgetCtx runtime.GadgetContext, pod v1.Pod) ([]byte
 	if parser != nil {
 		jsonHandler = parser.JSONHandlerFunc()
 		jsonArrayHandler = parser.JSONHandlerFuncArray(pod.Spec.NodeName)
+	} else {
+		jsonHandler = gadgetCtx.EventHandler()
 	}
 
 	doneChan := make(chan bool)

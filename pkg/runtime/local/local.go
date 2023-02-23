@@ -121,7 +121,11 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (out map[string][]b
 	// Set event handler
 	if setter, ok := gadgetInstance.(gadgets.EventHandlerSetter); ok {
 		log.Debugf("set event handler")
-		setter.SetEventHandler(gadgetCtx.Parser().EventHandlerFunc(operatorInstances.Enrich))
+		if parser := gadgetCtx.Parser(); parser != nil {
+			setter.SetEventHandler(parser.EventHandlerFunc(operatorInstances.Enrich))
+		} else {
+			setter.SetEventHandler(gadgetCtx.EventHandler())
+		}
 	}
 
 	// Set event handler for array results

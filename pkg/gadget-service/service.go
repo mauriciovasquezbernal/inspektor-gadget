@@ -154,6 +154,8 @@ func (s *Service) RunGadget(runGadget pb.GadgetManager_RunGadgetServer) error {
 	}()
 	seq := uint32(0)
 
+	var handler func(event []byte)
+
 	if parser != nil {
 		parser.SetLogCallback(logger.Logf)
 		parser.SetEventCallback(func(ev any) {
@@ -172,6 +174,18 @@ func (s *Service) RunGadget(runGadget pb.GadgetManager_RunGadgetServer) error {
 			default:
 			}
 		})
+	} else {
+		handler = func(event []byte) {
+			lev := &pb.GadgetEvent{
+				Type:    pb.EventTypeGadgetPayload,
+				Payload: event,
+				Seq:     atomic.AddUint32(&seq, 1),
+			}
+			select {
+			case outputBuffer <- lev:
+			default:
+			}
+		}
 	}
 
 	go func() {
@@ -210,6 +224,7 @@ func (s *Service) RunGadget(runGadget pb.GadgetManager_RunGadgetServer) error {
 		operatorParams,
 		parser,
 		logger,
+		handler,
 	)
 
 	// Handle commands sent by the client

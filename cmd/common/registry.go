@@ -199,6 +199,7 @@ func buildCommandFromGadget(
 				operatorsParamsCollection,
 				parser,
 				logger.DefaultLogger(),
+				nil,
 			)
 
 			outputModeInfo := strings.SplitN(outputMode, "=", 2)
@@ -229,6 +230,19 @@ func buildCommandFromGadget(
 					}
 				}
 
+				handler := func(event []byte) {
+					transformed, err := transformResult(event)
+					if err != nil {
+						return //fmt.Errorf("transforming result: %w", err)
+					}
+
+					fe.Output(string(transformed))
+				}
+
+				// As there is not a parser, set an event handler that will be used
+				// by the gadget to stream the events.
+				gadgetCtx.SetEventHandler(handler)
+
 				// This kind of gadgets return directly the result instead of
 				// using the parser
 				results, err := runtime.RunGadget(gadgetCtx)
@@ -237,6 +251,9 @@ func buildCommandFromGadget(
 				}
 
 				for node, result := range results {
+					if result == nil {
+						continue
+					}
 					transformed, err := transformResult(result)
 					if err != nil {
 						gadgetCtx.Logger().Warnf("transform result for %q: %v", node, result)
