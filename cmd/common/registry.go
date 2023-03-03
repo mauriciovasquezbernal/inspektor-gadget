@@ -53,8 +53,8 @@ func AddCommandsFromRegistry(rootCmd *cobra.Command, runtime runtime.Runtime, co
 	addFlags(rootCmd, runtimeParams)
 
 	// Add operator global flags
-	operatorsParamsCollection := operators.GlobalParamsCollection()
-	for _, operatorParams := range operatorsParamsCollection {
+	operatorsGlobalParamsCollection := operators.GlobalParamsCollection()
+	for _, operatorParams := range operatorsGlobalParamsCollection {
 		addFlags(rootCmd, operatorParams)
 	}
 
@@ -84,7 +84,7 @@ func AddCommandsFromRegistry(rootCmd *cobra.Command, runtime runtime.Runtime, co
 			columnFilters,
 			runtime,
 			runtimeParams,
-			operatorsParamsCollection,
+			operatorsGlobalParamsCollection,
 		))
 	}
 }
@@ -114,7 +114,7 @@ func buildCommandFromGadget(
 	columnFilters []cols.ColumnFilter,
 	runtime runtime.Runtime,
 	runtimeParams *params.Params,
-	operatorsParamsCollection params.Collection,
+	operatorsGlobalParamsCollection params.Collection,
 ) *cobra.Command {
 	var outputMode string
 	var verbose bool
@@ -135,7 +135,7 @@ func buildCommandFromGadget(
 
 	// Get per gadget operator params
 	validOperators := operators.GetOperatorsForGadget(gadgetDesc)
-	operatorsParamCollection := validOperators.ParamCollection()
+	operatorsParamsCollection := validOperators.ParamCollection()
 
 	cmd := &cobra.Command{
 		Use:          gadgetDesc.Name(),
@@ -154,7 +154,7 @@ func buildCommandFromGadget(
 			}
 			defer runtime.Close()
 
-			err = validOperators.Init(operatorsParamsCollection)
+			err = validOperators.Init(operatorsGlobalParamsCollection)
 			if err != nil {
 				return fmt.Errorf("initializing operators: %w", err)
 			}
@@ -178,7 +178,7 @@ func buildCommandFromGadget(
 				runtime,
 				gadgetDesc,
 				gadgetParams,
-				operatorsParamCollection,
+				operatorsParamsCollection,
 				parser,
 				logger.DefaultLogger(),
 			)
@@ -398,8 +398,8 @@ func buildCommandFromGadget(
 	// Add gadget flags
 	addFlags(cmd, gadgetParams)
 
-	// Add per-gadget operator flags
-	for _, operatorParams := range operatorsParamCollection {
+	// Add operator flags
+	for _, operatorParams := range operatorsParamsCollection {
 		addFlags(cmd, operatorParams)
 	}
 	return cmd
