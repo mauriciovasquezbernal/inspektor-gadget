@@ -44,13 +44,13 @@ const (
 
 // AddCommandsFromRegistry adds all gadgets known by the registry as cobra commands as a subcommand to their categories
 func AddCommandsFromRegistry(rootCmd *cobra.Command, runtime runtime.Runtime, columnFilters []cols.ColumnFilter) {
-	runtimeParams := runtime.GlobalParamDescs().ToParams()
+	runtimeGlobalParams := runtime.GlobalParamDescs().ToParams()
 
 	// Build lookup
 	lookup := make(map[string]*cobra.Command)
 
-	// Add runtime flags
-	addFlags(rootCmd, runtimeParams)
+	// Add global runtime flags
+	addFlags(rootCmd, runtimeGlobalParams)
 
 	// Add operator global flags
 	operatorsGlobalParamsCollection := operators.GlobalParamsCollection()
@@ -83,7 +83,7 @@ func AddCommandsFromRegistry(rootCmd *cobra.Command, runtime runtime.Runtime, co
 			gadgetDesc,
 			columnFilters,
 			runtime,
-			runtimeParams,
+			runtimeGlobalParams,
 			operatorsGlobalParamsCollection,
 		))
 	}
@@ -113,7 +113,7 @@ func buildCommandFromGadget(
 	gadgetDesc gadgets.GadgetDesc,
 	columnFilters []cols.ColumnFilter,
 	runtime runtime.Runtime,
-	runtimeParams *params.Params,
+	runtimeGlobalParams *params.Params,
 	operatorsGlobalParamsCollection params.Collection,
 ) *cobra.Command {
 	var outputMode string
@@ -129,6 +129,9 @@ func buildCommandFromGadget(
 	if parser != nil && columnFilters != nil {
 		parser.SetColumnFilters(columnFilters...)
 	}
+
+	// Instantiate runtime params
+	runtimeParams := runtime.ParamDescs().ToParams()
 
 	// Instantiate gadget params - this is important, because the params get filled out by cobra
 	gadgetParams := gadgetDesc.ParamDescs().ToParams()
@@ -148,7 +151,7 @@ func buildCommandFromGadget(
 			return nil
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			err := runtime.Init(runtimeParams)
+			err := runtime.Init(runtimeGlobalParams)
 			if err != nil {
 				return fmt.Errorf("initializing runtime: %w", err)
 			}
@@ -176,6 +179,7 @@ func buildCommandFromGadget(
 				ctx,
 				"",
 				runtime,
+				runtimeParams,
 				gadgetDesc,
 				gadgetParams,
 				operatorsParamsCollection,
@@ -394,6 +398,9 @@ func buildCommandFromGadget(
 
 	// Add params matching the gadget type
 	gadgetParams.Add(*gadgets.GadgetParams(gadgetDesc, parser).ToParams()...)
+
+	// Add runtime flags
+	addFlags(cmd, runtimeParams)
 
 	// Add gadget flags
 	addFlags(cmd, gadgetParams)
