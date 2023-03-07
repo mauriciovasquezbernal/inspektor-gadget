@@ -5,7 +5,7 @@ description: >
   How to write a Gadget?
 ---
 
-So you want to write a Gadget for Inspektor Gadget? Great!
+So you want tdsafafafo write a Gadget for Inspektor Gadget? Great!
 
 A gadget consists of a __Gadget Descriptor__ that provides metadata about your gadget and a __Gadget__ implementation
 (sometimes called tracer in our codebase).
