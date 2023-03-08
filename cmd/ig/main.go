@@ -15,6 +15,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -33,6 +34,12 @@ import (
 )
 
 func main() {
+	if os.Geteuid() != 0 {
+		fmt.Fprintf(os.Stderr, "%s must be run as root to be able to run eBPF programs\n", os.Args[0])
+
+		os.Exit(1)
+	}
+
 	rootCmd := &cobra.Command{
 		Use:   "ig",
 		Short: "Collection of gadgets for containers",
