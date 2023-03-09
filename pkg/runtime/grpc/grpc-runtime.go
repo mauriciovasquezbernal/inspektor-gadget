@@ -29,7 +29,6 @@ import (
 	log "github.com/sirupsen/logrus"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 
@@ -206,7 +205,12 @@ func (r *Runtime) GlobalParamDescs() params.ParamDescs {
 	}
 }
 
-func (r *Runtime) getGadgetPods(ctx context.Context, nodes []string) ([]v1.Pod, error) {
+type gadgetPod struct {
+	name string
+	node string
+}
+
+func (r *Runtime) getGadgetPods(ctx context.Context, nodes []string) ([]gadgetPod, error) {
 	config, err := utils.KubernetesConfigFlags.ToRESTConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to creating RESTConfig: %w", err)
@@ -227,25 +231,31 @@ func (r *Runtime) getGadgetPods(ctx context.Context, nodes []string) ([]v1.Pod, 
 		return nil, fmt.Errorf("no gadget pods found. Is Inspektor Gadget deployed?")
 	}
 
-	res := pods.Items
+	if len(nodes) == 0 {
+		res := make([]gadgetPod, 0, len(pods.Items))
 
-	if len(nodes) > 0 {
-		res = make([]v1.Pod, 0, len(pods.Items))
-
-		// Filter nodes
 		for _, pod := range pods.Items {
-			found := false
-			for _, node := range nodes {
-				if node == pod.Spec.NodeName {
-					found = true
-					break
-				}
-			}
-			if !found {
-				continue
-			}
-			res = append(res, pod)
+			res = append(res, gadgetPod{name: pod.Name, node: pod.Spec.NodeName})
 		}
+
+		return res, nil
+	}
+
+	// Filter nodes
+	res := make([]gadgetPod, 0, len(nodes))
+
+	for _, pod := range pods.Items {
+		found := false
+		for _, node := range nodes {
+			if node == pod.Spec.NodeName {
+				found = true
+				break
+			}
+		}
+		if !found {
+			continue
+		}
+		res = append(res, gadgetPod{name: pod.Name, node: pod.Spec.NodeName})
 	}
 
 	return res, nil
@@ -272,15 +282,15 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (map[string][]byte,
 	wg := sync.WaitGroup{}
 	for _, pod := range pods {
 		wg.Add(1)
-		go func(pod v1.Pod) {
-			gadgetCtx.Logger().Debugf("running gadget on node %q", pod.Spec.NodeName)
+		go func(pod gadgetPod) {
+			gadgetCtx.Logger().Debugf("running gadget on node %q", pod.node)
 			res, err := r.runGadget(gadgetCtx, pod)
 			if err != nil {
-				gadgetCtx.Logger().Errorf("node %q: %w", pod.Spec.NodeName, err)
+				gadgetCtx.Logger().Errorf("node %q: %w", pod.node, err)
 			}
 			if res != nil {
 				resultsLock.Lock()
-				results[pod.Spec.NodeName] = res
+				results[pod.node] = res
 				resultsLock.Unlock()
 			}
 			wg.Done()
@@ -291,7 +301,7 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (map[string][]byte,
 	return results, nil
 }
 
-func (r *Runtime) runGadget(gadgetCtx runtime.GadgetContext, pod v1.Pod) ([]byte, error) {
+func (r *Runtime) runGadget(gadgetCtx runtime.GadgetContext, pod gadgetPod) ([]byte, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -338,7 +348,7 @@ func (r *Runtime) runGadget(gadgetCtx runtime.GadgetContext, pod v1.Pod) ([]byte
 
 	if parser != nil {
 		jsonHandler = parser.JSONHandlerFunc()
-		jsonArrayHandler = parser.JSONHandlerFuncArray(pod.Spec.NodeName)
+		jsonArrayHandler = parser.JSONHandlerFuncArray(pod.node)
 	}
 
 	doneChan := make(chan bool)
@@ -373,7 +383,7 @@ func (r *Runtime) runGadget(gadgetCtx runtime.GadgetContext, pod v1.Pod) ([]byte
 				return
 			default:
 				if ev.Type >= 1<<pb.EventLogShift {
-					gadgetCtx.Logger().Log(logger.Level(ev.Type>>pb.EventLogShift), fmt.Sprintf("%-20s | %s", pod.Spec.NodeName, string(ev.Payload)))
+					gadgetCtx.Logger().Log(logger.Level(ev.Type>>pb.EventLogShift), fmt.Sprintf("%-20s | %s", pod.node, string(ev.Payload)))
 					continue
 				}
 				gadgetCtx.Logger().Warnf("unknown payload type %d: %s", ev.Type, ev.Payload)

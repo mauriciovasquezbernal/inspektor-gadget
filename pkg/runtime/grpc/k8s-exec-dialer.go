@@ -40,7 +40,7 @@ type k8sExecConn struct {
 }
 
 // NewK8SExecConn connects to a Pod using the Kubernetes API Server and launches a socat
-func NewK8SExecConn(ctx context.Context, pod v1.Pod, timeout time.Duration) (net.Conn, error) {
+func NewK8SExecConn(ctx context.Context, pod gadgetPod, timeout time.Duration) (net.Conn, error) {
 	readerExt, writer := io.Pipe()
 	reader, writerExt := io.Pipe()
 	conn := &k8sExecConn{
@@ -56,7 +56,7 @@ func NewK8SExecConn(ctx context.Context, pod v1.Pod, timeout time.Duration) (net
 	// set GroupVersion and NegotiatedSerializer for RESTClient
 	factory.SetKubernetesDefaults(config)
 
-	conn.podName = pod.Name
+	conn.podName = pod.name
 
 	config.Timeout = timeout
 
@@ -98,7 +98,7 @@ func NewK8SExecConn(ctx context.Context, pod v1.Pod, timeout time.Duration) (net
 			TerminalSizeQueue: nil,
 		})
 		if err != nil {
-			log.Warnf("connect to gadget service on node %q: %v", pod.Spec.NodeName, err)
+			log.Warnf("connect to gadget service on node %q: %v", pod.node, err)
 		}
 	}()
 	return conn, nil
