@@ -241,21 +241,30 @@ func (r *Runtime) getGadgetPods(ctx context.Context, nodes []string) ([]gadgetPo
 		return res, nil
 	}
 
-	// Filter nodes
-	res := make([]gadgetPod, 0, len(nodes))
+	// Remove possible duplicates in nodes
+	resMap := map[string]string{}
+	for _, node := range nodes {
+		resMap[node] = ""
+	}
 
-	for _, pod := range pods.Items {
-		found := false
-		for _, node := range nodes {
+	// Filter nodes
+	for node := range resMap {
+		for _, pod := range pods.Items {
 			if node == pod.Spec.NodeName {
-				found = true
+				resMap[node] = pod.Name
 				break
 			}
 		}
-		if !found {
+	}
+
+	res := make([]gadgetPod, 0, len(resMap))
+
+	for node, pod := range resMap {
+		if pod == "" {
+			log.Warnf("node %q not found", node)
 			continue
 		}
-		res = append(res, gadgetPod{name: pod.Name, node: pod.Spec.NodeName})
+		res = append(res, gadgetPod{name: pod, node: node})
 	}
 
 	return res, nil
