@@ -48,7 +48,7 @@ LDFLAGS := "-X main.version=$(VERSION) \
 
 .DEFAULT_GOAL := build
 .PHONY: build
-build: manifests generate kubectl-gadget gadget-default-container
+build: kubectl-gadget gadget-default-container
 
 .PHONY: all
 all: build ig
@@ -201,7 +201,7 @@ lint:
 # minikube
 LIVENESS_PROBE ?= true
 .PHONY: minikube-deploy
-minikube-deploy: minikube-start gadget-default-container kubectl-gadget
+minikube-deploy: gadget-default-container kubectl-gadget
 	@echo "Image on the host:"
 	docker image list --format "table {{.ID}}\t{{.Repository}}:{{.Tag}}\t{{.Size}}" |grep $(CONTAINER_REPO):$(IMAGE_TAG)
 	@echo
@@ -231,3 +231,32 @@ minikube-deploy: minikube-start gadget-default-container kubectl-gadget
 .PHONY: btfgen
 btfgen:
 	+make -f Makefile.btfgen
+
+.PHONY: help
+help:
+	@echo  'Building targets:'
+	@echo  '  all		  		- Build all targets marked with [*]'
+	@echo  '* ig		  		- Build the ig cli tool'
+	@echo  '  ig-all	  		- Build the ig cli tool for all architectures'
+	@echo  '* build		  		- Build all targets marked with [o]'
+	@echo  'o kubectl-gadget		- Build the kubectl plugin'
+	@echo  '  kubectl-gadget-all		- Build the kubectl plugin for all architectures'
+	@echo  'o gadget-default-container	- Build the gadget container default image'
+	@echo  '  gadget-container-all		- Build all flavors of the gadget container image'
+	@echo  '  ebpf-objects			- Build eBPF objects file inside docker'
+	@echo  '  ebpf-objects-outside-docker	- Build eBPF objects file on host'
+	@echo  '  btfgen			- Build BTF files'
+	@echo  '  list-ig-targets		- List ig available architectures'
+	@echo  '  list-kubectl-gadget-targets	- List kubectk plugin available architectures'
+	@echo  ''
+	@echo  'Testing targets:'
+	@echo  '  test				- Run units tests'
+	@echo  '  controller-tests		- Run controllers units tests'
+	@echo  '  ig-tests			- Run ig manager units tests'
+	@echo  '  gadgets-unit-tests		- Run gadget units tests'
+	@echo  '  integration-tests		- Run integration tests'
+	@echo  ''
+	@echo  'Development targets:'
+	@echo  '  lint				- Lint the code'
+	@echo  '  generate-documentation	- Generate documentation for gadgets and trace CRD'
+	@echo  '  minikube-deploy		- Build and deploy the gadget container on minikube using docker driver'
