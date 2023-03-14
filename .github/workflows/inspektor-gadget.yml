@@ -564,8 +564,9 @@ jobs:
       uses: ./.github/actions/install-debian-packages
     - name: Show repository setup
       run: |
-        echo "${{ github.event.pull_request.head.repo.full_name }}"
-        echo "${{ github.repository }}"
+        echo "github.event_name: ${{ github.event_name }}"
+        echo "github.event.pull_request.head.repo.full_name: ${{ github.event.pull_request.head.repo.full_name }}"
+        echo "github.repository: ${{ github.repository }}"
     - name: Run benchmarks
       run: go test -exec sudo -bench=. -run=Benchmark ./pkg/gadgets/... ./internal/benchmarks/... | tee output.txt
     #- name: Download previous benchmark data
