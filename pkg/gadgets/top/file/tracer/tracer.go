@@ -78,7 +78,7 @@ func NewTracer(config *Config, enricher gadgets.DataEnricherByMntNs,
 	}
 	t.colMap = statCols.GetColumnMap()
 
-	go t.run(context.TODO(), nil)
+	go t.run(context.TODO())
 
 	return t, nil
 }
@@ -219,7 +219,7 @@ func (t *Tracer) nextStats() ([]*types.Stats, error) {
 	return stats, nil
 }
 
-func (t *Tracer) run(ctx context.Context, cancel context.CancelFunc) {
+func (t *Tracer) run(ctx context.Context) error {
 	count := t.config.Count
 	ticker := time.NewTicker(t.config.Interval)
 
@@ -228,16 +228,16 @@ func (t *Tracer) run(ctx context.Context, cancel context.CancelFunc) {
 		case <-t.done:
 			// TODO: Once we completely move to use Run instead of NewTracer,
 			// we can remove this as nobody will directly call Stop (cleanup).
-			return
+			return nil
 		case <-ctx.Done():
-			return
+			return nil
 		case <-ticker.C:
 			stats, err := t.nextStats()
 			if err != nil {
 				t.eventCallback(&top.Event[types.Stats]{
 					Error: fmt.Sprintf("getting next stats: %s", err),
 				})
-				return
+				return err
 			}
 
 			n := len(stats)
@@ -249,10 +249,7 @@ func (t *Tracer) run(ctx context.Context, cancel context.CancelFunc) {
 			if count > 0 {
 				count--
 				if count == 0 {
-					if cancel != nil {
-						cancel()
-					}
-					return
+					return nil
 				}
 			}
 		}
@@ -274,10 +271,7 @@ func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 	ctx, cancel := context.WithCancel(gadgetCtx.Context())
 	defer cancel()
 
-	go t.run(ctx, cancel)
-	<-ctx.Done()
-
-	return nil
+	return t.run(ctx)
 }
 
 func (t *Tracer) SetEventHandlerArray(handler any) {
