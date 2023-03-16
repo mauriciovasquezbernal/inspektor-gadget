@@ -8,7 +8,7 @@
 // Maximum number of A or AAAA answers to include in the DNS event.
 // The DNS reply could have more answers than this, but the additional
 // answers won't be sent to userspace.
-#define MAX_ADDR_ANSWERS 4
+#define MAX_ADDR_ANSWERS 8
 
 struct event_t {
 	__u64 timestamp;

@@ -15,9 +15,9 @@
 
 #define DNS_OFF (ETH_HLEN + sizeof(struct iphdr) + sizeof(struct udphdr))
 
-const int DNS_CLASS_IN = 1;   // https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.4
-const int DNS_TYPE_A = 1;     // https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.2
-const int DNS_TYPE_AAAA = 28; // https://www.rfc-editor.org/rfc/rfc3596#section-2.1
+#define DNS_CLASS_IN 1   // https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.4
+#define DNS_TYPE_A 1     // https://datatracker.ietf.org/doc/html/rfc1035#section-3.2.2
+#define DNS_TYPE_AAAA 28 // https://www.rfc-editor.org/rfc/rfc3596#section-2.1
 
 /* llvm builtin functions that eBPF C program may use to
  * emit BPF_LD_ABS and BPF_LD_IND instructions
@@ -79,12 +79,12 @@ struct dnshdr {
 // https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.3
 #pragma pack(2)
 struct dnsrr {
-       __u16 name; // Two octets when using message compression, see https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.4
-       __u16 type;
-       __u16 class;
-       __u32 ttl;
-       __u16 rdlength;
-       // Followed by rdata
+	__u16 name; // Two octets when using message compression, see https://datatracker.ietf.org/doc/html/rfc1035#section-4.1.4
+	__u16 type;
+	__u16 class;
+	__u32 ttl;
+	__u16 rdlength;
+	// Followed by rdata
 };
 
 static __always_inline __u32 dns_name_length(struct __sk_buff *skb)
@@ -118,9 +118,8 @@ void load_addresses(struct __sk_buff *skb, int ancount, int anoffset, struct eve
 
 		// In most cases, the name will be compressed to two octets (indicated by first two bits 0b11).
 		// The offset calculations below assume compression, so exit early if the name isn't compressed.
-		if ((rrname & 0xF0) != 0xC0) {
+		if ((rrname & 0xf0) != 0xc0)
 			return;
-		}
 
 		// Safe to assume that all answers refer to the same domain name
 		// because we verified earlier that there's exactly one question.
@@ -177,7 +176,7 @@ output_dns_event(struct __sk_buff *skb, union dnsflags flags, __u32 name_len, __
 
 	event.ancount = ancount;
 
-	// DNS answers start immediately after qname (name_len octects) + qtype (2 octects) + qclass (2 octets).
+	// DNS answers start immediately after qname (name_len octets) + qtype (2 octets) + qclass (2 octets).
 	int anoffset = DNS_OFF + sizeof(struct dnshdr) + name_len + 5;
 	load_addresses(skb, ancount, anoffset, &event);
 
