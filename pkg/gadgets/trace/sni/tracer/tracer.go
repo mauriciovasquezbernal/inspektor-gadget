@@ -46,24 +46,14 @@ type Tracer struct {
 }
 
 func NewTracer() (*Tracer, error) {
-	spec, err := loadSnisnoop()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load asset: %w", err)
+	t := &Tracer{}
+
+	if err := t.install(); err != nil {
+		t.Close()
+		return nil, fmt.Errorf("installing tracer: %w", err)
 	}
 
-	networkTracer, err := networktracer.NewTracer(
-		spec,
-		BPFProgName,
-		BPFPerfMapName,
-		BPFSocketAttach,
-		types.Base,
-		parseSNIEvent,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("creating network tracer: %w", err)
-	}
-
-	return &Tracer{Tracer: networkTracer}, nil
+	return t, nil
 }
 
 func parseSNIEvent(sample []byte, netns uint64) (*types.Event, error) {
@@ -114,12 +104,23 @@ func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
 }
 
 func (t *Tracer) install() error {
-	// TODO: It is ugly. Clean it up.
-	tracer, err := NewTracer()
+	spec, err := loadSnisnoop()
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load asset: %w", err)
 	}
-	t.Tracer = tracer.Tracer
+
+	networkTracer, err := networktracer.NewTracer(
+		spec,
+		BPFProgName,
+		BPFPerfMapName,
+		BPFSocketAttach,
+		types.Base,
+		parseSNIEvent,
+	)
+	if err != nil {
+		return fmt.Errorf("creating network tracer: %w", err)
+	}
+	t.Tracer = networkTracer
 	return nil
 }
 

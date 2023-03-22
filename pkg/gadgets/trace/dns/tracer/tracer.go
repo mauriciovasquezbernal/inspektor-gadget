@@ -48,52 +48,14 @@ type Tracer struct {
 }
 
 func NewTracer() (*Tracer, error) {
-	spec, err := loadDns()
-	if err != nil {
-		return nil, fmt.Errorf("failed to load asset: %w", err)
+	t := &Tracer{}
+
+	if err := t.install(); err != nil {
+		t.Close()
+		return nil, fmt.Errorf("installing tracer: %w", err)
 	}
 
-	latencyCalc, err := newDNSLatencyCalculator()
-	if err != nil {
-		return nil, err
-	}
-
-	parseAndEnrichDNSEvent := func(rawSample []byte, netns uint64) (*types.Event, error) {
-		bpfEvent := (*dnsEventT)(unsafe.Pointer(&rawSample[0]))
-		if len(rawSample) < int(unsafe.Sizeof(*bpfEvent)) {
-			return nil, errors.New("invalid sample size")
-		}
-
-		event, err := bpfEventToDNSEvent(bpfEvent, netns)
-		if err != nil {
-			return nil, err
-		}
-
-		// Derive latency from the query/response timestamps.
-		// Filter by packet type (OUTGOING for queries and HOST for responses) to exclude cases where
-		// the packet is forwarded between containers in the host netns.
-		if bpfEvent.Qr == 0 && bpfEvent.PktType == unix.PACKET_OUTGOING {
-			latencyCalc.storeDNSQueryTimestamp(netns, bpfEvent.Id, uint64(event.Event.Timestamp))
-		} else if bpfEvent.Qr == 1 && bpfEvent.PktType == unix.PACKET_HOST {
-			event.Latency = latencyCalc.calculateDNSResponseLatency(netns, bpfEvent.Id, uint64(event.Event.Timestamp))
-		}
-
-		return event, nil
-	}
-
-	networkTracer, err := networktracer.NewTracer(
-		spec,
-		BPFProgName,
-		BPFPerfMapName,
-		BPFSocketAttach,
-		types.Base,
-		parseAndEnrichDNSEvent,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("creating network tracer: %w", err)
-	}
-
-	return &Tracer{Tracer: networkTracer}, nil
+	return t, nil
 }
 
 // pkt_type definitions:
@@ -313,13 +275,53 @@ func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
 }
 
 func (t *Tracer) install() error {
-	// TODO: It is ugly. Clean it up.
-	tracer, err := NewTracer()
+	spec, err := loadDns()
+	if err != nil {
+		return fmt.Errorf("failed to load asset: %w", err)
+	}
+
+	latencyCalc, err := newDNSLatencyCalculator()
 	if err != nil {
 		return err
 	}
-	t.Tracer = tracer.Tracer
+
+	parseAndEnrichDNSEvent := func(rawSample []byte, netns uint64) (*types.Event, error) {
+		bpfEvent := (*dnsEventT)(unsafe.Pointer(&rawSample[0]))
+		if len(rawSample) < int(unsafe.Sizeof(*bpfEvent)) {
+			return nil, errors.New("invalid sample size")
+		}
+
+		event, err := bpfEventToDNSEvent(bpfEvent, netns)
+		if err != nil {
+			return nil, err
+		}
+
+		// Derive latency from the query/response timestamps.
+		// Filter by packet type (OUTGOING for queries and HOST for responses) to exclude cases where
+		// the packet is forwarded between containers in the host netns.
+		if bpfEvent.Qr == 0 && bpfEvent.PktType == unix.PACKET_OUTGOING {
+			latencyCalc.storeDNSQueryTimestamp(netns, bpfEvent.Id, uint64(event.Event.Timestamp))
+		} else if bpfEvent.Qr == 1 && bpfEvent.PktType == unix.PACKET_HOST {
+			event.Latency = latencyCalc.calculateDNSResponseLatency(netns, bpfEvent.Id, uint64(event.Event.Timestamp))
+		}
+
+		return event, nil
+	}
+
+	networkTracer, err := networktracer.NewTracer(
+		spec,
+		BPFProgName,
+		BPFPerfMapName,
+		BPFSocketAttach,
+		types.Base,
+		parseAndEnrichDNSEvent,
+	)
+	if err != nil {
+		return fmt.Errorf("creating network tracer: %w", err)
+	}
+	t.Tracer = networkTracer
 	return nil
+
 }
 
 func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
