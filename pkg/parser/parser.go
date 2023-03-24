@@ -24,6 +24,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/columns"
@@ -86,6 +87,13 @@ type Parser interface {
 	// EnableSnapshots initializes the snapshot combiner, which is able to aggregate snapshots from several sources
 	// and can return (optionally cached) results on demand; used for top gadgets
 	EnableSnapshots(ctx context.Context, t time.Duration, ttl int)
+
+	// EnableCombiner initializes the event combiner, which aggregates events from all sources and
+	// only releases them when all events from all sources have been collected; used for snapshot gadgets.
+	// n is the number of sources to wait for, the returned function is used to trigger the event printing
+	// immediately without waiting for all events, it's useful to print some results when a source fails
+	// to send any information.
+	EnableCombiner(n int) func()
 }
 
 type parser[T any] struct {
@@ -99,6 +107,13 @@ type parser[T any] struct {
 	logCallback        LogCallback
 	snapshotCombiner   *snapshotcombiner.SnapshotCombiner[T]
 	columnFilters      []columns.ColumnFilter
+
+	// event combiner related fields
+	eventCombinerEnabled bool
+	allEvents            []*T
+	mu                   sync.Mutex
+	receivedCount        int
+	expectedCount        int
 }
 
 func NewParser[T any](columns *columns.Columns[T]) Parser {
@@ -125,6 +140,29 @@ func (p *parser[T]) EnableSnapshots(ctx context.Context, interval time.Duration,
 			}
 		}
 	}()
+}
+
+func (p *parser[T]) EnableCombiner(n int) func() {
+	if p.eventCallbackArray == nil {
+		panic("EnableCombiner needs EventCallbackArray set")
+	}
+
+	p.eventCombinerEnabled = true
+	p.expectedCount = n
+
+	return func() {
+		// In case we're not able to collect information from all nodes, print it
+		p.mu.Lock()
+		defer p.mu.Unlock()
+
+		if p.receivedCount == p.expectedCount {
+			return
+		}
+
+		// TODO: how to pass enrichers?
+		handler := p.eventHandlerArray()
+		handler(p.allEvents)
+	}
 }
 
 func (p *parser[T]) SetColumnFilters(filters ...columns.ColumnFilter) {
@@ -247,6 +285,28 @@ func (p *parser[T]) JSONHandlerFuncArray(key string, enrichers ...func(any) erro
 	if p.snapshotCombiner != nil {
 		handler = p.eventHandlerSnapshot(key, enrichers...)
 	}
+
+	if p.eventCombinerEnabled {
+		return func(event []byte) {
+			var ev []*T
+			err := json.Unmarshal(event, &ev)
+			if err != nil {
+				p.writeLogMessage(logger.WarnLevel, "unmarshalling: %s", err)
+				return
+			}
+
+			p.mu.Lock()
+			defer p.mu.Unlock()
+
+			p.allEvents = append(p.allEvents, ev...)
+			p.receivedCount++
+
+			if p.receivedCount == p.expectedCount {
+				handler(p.allEvents)
+			}
+		}
+	}
+
 	return func(event []byte) {
 		var ev []*T
 		err := json.Unmarshal(event, &ev)
