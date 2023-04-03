@@ -15,6 +15,9 @@
 package tracer
 
 import (
+	"strings"
+
+	"github.com/inspektor-gadget/inspektor-gadget/cmd/common"
 	gadgetregistry "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-registry"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/snapshot/process/types"
@@ -62,6 +65,28 @@ func (g *GadgetDesc) Parser() parser.Parser {
 
 func (g *GadgetDesc) EventPrototype() any {
 	return &types.Event{}
+}
+
+func (g *GadgetDesc) OutputFormats() (gadgets.OutputFormats, string) {
+	return gadgets.OutputFormats{
+		"tree": gadgets.OutputFormat{
+			Name:           "Tree",
+			Description:    "A pstree like output",
+			TransformType:  gadgets.TransformTypeArray,
+			TransformArray: func(data any) ([]byte, error) {
+				processes := data.([]*types.Event)
+
+				var builder strings.Builder
+				err := types.WriteTree(&builder, processes)
+				if err != nil {
+					return nil, err
+				}
+
+				return []byte(builder.String()), nil
+			},
+		},
+	// We still want to have columns as default output mode.
+	}, common.OutputModeColumns
 }
 
 func (g *GadgetDesc) SortByDefault() []string {
