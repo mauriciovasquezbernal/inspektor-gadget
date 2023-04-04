@@ -94,9 +94,10 @@ func (l *LocalManager) ParamDescs() params.ParamDescs {
 func (l *LocalManager) CanOperateOn(gadget gadgets.GadgetDesc) bool {
 	// We need to be able to get MountNSID or NetNSID, and set ContainerInfo, so
 	// check for that first
+	_, canEnrichEventWithNode := gadget.EventPrototype().(operators.ContainerNodeSetter)
 	_, canEnrichEventFromMountNs := gadget.EventPrototype().(operators.ContainerInfoFromMountNSID)
 	_, canEnrichEventFromNetNs := gadget.EventPrototype().(operators.ContainerInfoFromNetNSID)
-	canEnrichEvent := canEnrichEventFromMountNs || canEnrichEventFromNetNs
+	canEnrichEvent := canEnrichEventWithNode || canEnrichEventFromMountNs || canEnrichEventFromNetNs
 
 	// Secondly, we need to be able to inject the ebpf map onto the gadget instance
 	gi, ok := gadget.(gadgets.GadgetInstantiate)
@@ -113,12 +114,13 @@ func (l *LocalManager) CanOperateOn(gadget gadgets.GadgetDesc) bool {
 	_, isAttacher := instance.(Attacher)
 
 	log.Debugf("> canEnrichEvent: %v", canEnrichEvent)
+	log.Debugf("\t> canEnrichEventWithNode: %v", canEnrichEventWithNode)
 	log.Debugf("\t> canEnrichEventFromMountNs: %v", canEnrichEventFromMountNs)
 	log.Debugf("\t> canEnrichEventFromNetNs: %v", canEnrichEventFromNetNs)
 	log.Debugf("> isMountNsMapSetter: %v", isMountNsMapSetter)
 	log.Debugf("> isAttacher: %v", isAttacher)
 
-	return (isMountNsMapSetter && canEnrichEvent) || isAttacher
+	return isMountNsMapSetter || canEnrichEvent || isAttacher
 }
 
 func (l *LocalManager) Init(operatorParams *params.Params) error {
@@ -300,6 +302,9 @@ func (l *localManagerTrace) PostGadgetRun() error {
 }
 
 func (l *localManagerTrace) enrich(ev any) {
+	if event, canEnrichEventWithNode := ev.(operators.ContainerNodeSetter); canEnrichEventWithNode {
+		l.manager.igManager.ContainerCollection.EnrichEventWithNode(event)
+	}
 	if event, canEnrichEventFromMountNs := ev.(operators.ContainerInfoFromMountNSID); canEnrichEventFromMountNs {
 		l.manager.igManager.ContainerCollection.EnrichEventByMntNs(event)
 	}
