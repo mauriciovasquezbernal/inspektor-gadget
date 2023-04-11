@@ -24,10 +24,12 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	libseccomp "github.com/seccomp/libseccomp-golang"
+	log "github.com/sirupsen/logrus"
 
 	containercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/container-collection"
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 )
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target $TARGET -cc clang seccomp ./bpf/seccomp.bpf.c -- -I./bpf/ -I../../../../${TARGET}
@@ -56,7 +58,9 @@ type Tracer struct {
 func NewTracer() (*Tracer, error) {
 	t := &Tracer{}
 
-	if err := t.install(); err != nil {
+	localLog := log.New()
+	localLog.SetLevel(log.GetLevel())
+	if err := t.install(localLog); err != nil {
 		t.Close()
 		return nil, err
 	}
@@ -64,7 +68,7 @@ func NewTracer() (*Tracer, error) {
 	return t, nil
 }
 
-func (t *Tracer) install() error {
+func (t *Tracer) install(logger logger.Logger) error {
 	spec, err := loadSeccomp()
 	if err != nil {
 		return fmt.Errorf("failed to load asset: %w", err)
@@ -143,7 +147,7 @@ func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 
 func (t *Tracer) RunWithResult(gadgetCtx gadgets.GadgetContext) ([]byte, error) {
 	defer t.Close()
-	if err := t.install(); err != nil {
+	if err := t.install(gadgetCtx.Logger()); err != nil {
 		return nil, fmt.Errorf("installing tracer: %w", err)
 	}
 

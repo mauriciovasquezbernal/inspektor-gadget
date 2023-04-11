@@ -29,9 +29,10 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	snapshotProcessTypes "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/snapshot/process/types"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 )
 
-type collectorFunc func(config *Config, enricher gadgets.DataEnricherByMntNs) ([]*snapshotProcessTypes.Event, error)
+type collectorFunc func(config *Config, enricher gadgets.DataEnricherByMntNs, logger logger.Logger) ([]*snapshotProcessTypes.Event, error)
 
 func BenchmarkSnapshotProcessEBPFTracer(b *testing.B) {
 	benchmarkTracer(b, runeBPFCollector)
@@ -45,7 +46,7 @@ func benchmarkTracer(b *testing.B, runCollector collectorFunc) {
 	utilstest.RequireRoot(b)
 
 	for n := 0; n < b.N; n++ {
-		_, err := runCollector(&Config{}, nil)
+		_, err := runCollector(&Config{}, nil, nil)
 		if err != nil {
 			b.Fatalf("benchmarking collector: %s", err)
 		}
@@ -197,7 +198,7 @@ func testTracer(t *testing.T, runCollector collectorFunc) {
 				return err
 			})
 
-			events, err := runCollector(test.getTracerConfig(runner.Info), nil)
+			events, err := runCollector(test.getTracerConfig(runner.Info), nil, nil)
 			if err != nil {
 				t.Fatalf("running collector: %s", err)
 			}

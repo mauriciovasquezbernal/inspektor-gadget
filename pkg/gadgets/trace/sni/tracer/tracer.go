@@ -26,7 +26,9 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/internal/networktracer"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/trace/sni/types"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
+	log "github.com/sirupsen/logrus"
 )
 
 //go:generate bash -c "source ./clangosflags.sh; go run github.com/cilium/ebpf/cmd/bpf2go -target bpfel -cc clang -type event_t snisnoop ./bpf/snisnoop.c -- $CLANG_OS_FLAGS -I./bpf/ -I../../../internal/socketenricher/bpf"
@@ -48,7 +50,9 @@ type Tracer struct {
 func NewTracer() (*Tracer, error) {
 	t := &Tracer{}
 
-	if err := t.install(); err != nil {
+	localLog := log.New()
+	localLog.SetLevel(log.GetLevel())
+	if err := t.install(localLog); err != nil {
 		t.Close()
 		return nil, fmt.Errorf("installing tracer: %w", err)
 	}
@@ -93,7 +97,7 @@ func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 }
 
 func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
-	if err := t.install(); err != nil {
+	if err := t.install(gadgetCtx.Logger()); err != nil {
 		t.Close()
 		return fmt.Errorf("installing tracer: %w", err)
 	}
@@ -102,7 +106,7 @@ func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
 	return nil
 }
 
-func (t *Tracer) install() error {
+func (t *Tracer) install(logger logger.Logger) error {
 	spec, err := loadSnisnoop()
 	if err != nil {
 		return fmt.Errorf("failed to load asset: %w", err)

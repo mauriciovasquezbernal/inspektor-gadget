@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/bpfstats"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/columns"
@@ -35,6 +36,7 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/top"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/top/ebpf/piditer"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/top/ebpf/types"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 )
 
 type Config struct {
@@ -74,7 +76,9 @@ func NewTracer(config *Config, enricher gadgets.DataNodeEnricher,
 		prevStats:     make(map[string]programStats),
 	}
 
-	if err := t.install(); err != nil {
+	localLog := log.New()
+	localLog.SetLevel(log.GetLevel())
+	if err := t.install(localLog); err != nil {
 		t.close()
 		return nil, err
 	}
@@ -91,7 +95,7 @@ func NewTracer(config *Config, enricher gadgets.DataNodeEnricher,
 	return t, nil
 }
 
-func (t *Tracer) install() error {
+func (t *Tracer) install(logger logger.Logger) error {
 	// Enable stats collection
 	err := bpfstats.EnableBPFStats()
 	if err != nil {
@@ -423,7 +427,7 @@ func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 	}
 
 	defer t.close()
-	if err := t.install(); err != nil {
+	if err := t.install(gadgetCtx.Logger()); err != nil {
 		return fmt.Errorf("installing tracer: %w", err)
 	}
 

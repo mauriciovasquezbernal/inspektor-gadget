@@ -38,6 +38,7 @@ import (
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/traceloop/types"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
 
@@ -111,14 +112,16 @@ func NewTracer(enricher gadgets.DataEnricherByMntNs) (*Tracer, error) {
 	t := &Tracer{
 		enricher: enricher,
 	}
-	if err := t.install(); err != nil {
+	localLog := log.New()
+	localLog.SetLevel(log.GetLevel())
+	if err := t.install(localLog); err != nil {
 		t.close()
 		return nil, err
 	}
 	return t, nil
 }
 
-func (t *Tracer) install() error {
+func (t *Tracer) install(logger logger.Logger) error {
 	spec, err := loadTraceloop()
 	if err != nil {
 		return fmt.Errorf("loading ebpf program: %w", err)
@@ -650,7 +653,7 @@ func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 }
 
 func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
-	if err := t.install(); err != nil {
+	if err := t.install(gadgetCtx.Logger()); err != nil {
 		t.close()
 		return fmt.Errorf("installing tracer: %w", err)
 	}

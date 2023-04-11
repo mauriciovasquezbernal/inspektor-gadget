@@ -27,11 +27,13 @@ import (
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
 	libseccomp "github.com/seccomp/libseccomp-golang"
+	log "github.com/sirupsen/logrus"
 	"github.com/syndtr/gocapability/capability"
 
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/trace/capabilities/types"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
 
@@ -109,7 +111,9 @@ func NewTracer(c *Config, enricher gadgets.DataEnricherByMntNs,
 		eventCallback: eventCallback,
 	}
 
-	if err := t.install(); err != nil {
+	localLog := log.New()
+	localLog.SetLevel(log.GetLevel())
+	if err := t.install(localLog); err != nil {
 		t.close()
 		return nil, err
 	}
@@ -138,7 +142,7 @@ func (t *Tracer) close() {
 	t.objs.Close()
 }
 
-func (t *Tracer) install() error {
+func (t *Tracer) install(logger logger.Logger) error {
 	runningKernelVersion, err := features.LinuxVersionCode()
 	if err != nil {
 		return fmt.Errorf("error getting kernel version: %w", err)
@@ -156,7 +160,7 @@ func (t *Tracer) install() error {
 		"unique":             t.config.Unique,
 	}
 
-	if err := gadgets.LoadeBPFSpec(t.config.MountnsMap, spec, consts, &t.objs); err != nil {
+	if err := gadgets.LoadeBPFSpec(t.config.MountnsMap, spec, consts, &t.objs, logger); err != nil {
 		return fmt.Errorf("loading ebpf spec: %w", err)
 	}
 
@@ -314,7 +318,7 @@ func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 	t.config.AuditOnly = params.Get(ParamAuditOnly).AsBool()
 
 	defer t.close()
-	if err := t.install(); err != nil {
+	if err := t.install(gadgetCtx.Logger()); err != nil {
 		return fmt.Errorf("installing tracer: %w", err)
 	}
 

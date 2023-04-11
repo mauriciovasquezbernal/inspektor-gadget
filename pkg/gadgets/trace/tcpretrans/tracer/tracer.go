@@ -31,6 +31,7 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/internal/networktracer"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/internal/socketenricher"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/trace/tcpretrans/types"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/tcpbits"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
@@ -53,7 +54,7 @@ func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 
 func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 	defer t.close()
-	if err := t.install(); err != nil {
+	if err := t.install(gadgetCtx.Logger()); err != nil {
 		return fmt.Errorf("installing tracer: %w", err)
 	}
 
@@ -85,7 +86,7 @@ func (t *Tracer) close() {
 	t.objs.Close()
 }
 
-func (t *Tracer) install() error {
+func (t *Tracer) install(logger logger.Logger) error {
 	var err error
 	t.socketEnricher, err = socketenricher.NewSocketEnricher()
 	if err != nil {

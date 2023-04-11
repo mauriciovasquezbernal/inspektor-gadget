@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"strconv"
 
+	log "github.com/sirupsen/logrus"
+
 	gadgetv1alpha1 "github.com/inspektor-gadget/inspektor-gadget/pkg/apis/gadget/v1alpha1"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-collection/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/snapshot/process/tracer"
@@ -91,7 +93,9 @@ func (t *Trace) Collect(trace *gadgetv1alpha1.Trace) {
 		MountnsMap:  mountNsMap,
 		ShowThreads: showThreads,
 	}
-	events, err := tracer.RunCollector(config, t.helpers)
+	localLog := log.New()
+	localLog.SetLevel(log.GetLevel())
+	events, err := tracer.RunCollector(config, t.helpers, localLog)
 	if err != nil {
 		trace.Status.OperationError = err.Error()
 		return

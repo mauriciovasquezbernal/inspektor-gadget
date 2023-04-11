@@ -29,7 +29,7 @@ func main() {
 		return
 	}
 
-	processes, err := tracer.RunCollector(&tracer.Config{}, nil)
+	processes, err := tracer.RunCollector(&tracer.Config{}, nil, nil)
 	if err != nil {
 		fmt.Printf("error running collector: %s\n", err)
 		return

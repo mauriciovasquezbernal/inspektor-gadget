@@ -26,10 +26,12 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
+	log "github.com/sirupsen/logrus"
 
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/trace/tcpconnect/types"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
 
@@ -65,7 +67,9 @@ func NewTracer(config *Config, enricher gadgets.DataEnricherByMntNs,
 		eventCallback: eventCallback,
 	}
 
-	if err := t.install(); err != nil {
+	localLog := log.New()
+	localLog.SetLevel(log.GetLevel())
+	if err := t.install(localLog); err != nil {
 		t.close()
 		return nil, err
 	}
@@ -92,7 +96,7 @@ func (t *Tracer) close() {
 	t.objs.Close()
 }
 
-func (t *Tracer) install() error {
+func (t *Tracer) install(logger logger.Logger) error {
 	var err error
 	spec, err := loadTcpconnect()
 	if err != nil {
@@ -104,7 +108,7 @@ func (t *Tracer) install() error {
 		"calculate_latency":   t.config.CalculateLatency,
 	}
 
-	if err := gadgets.LoadeBPFSpec(t.config.MountnsMap, spec, consts, &t.objs); err != nil {
+	if err := gadgets.LoadeBPFSpec(t.config.MountnsMap, spec, consts, &t.objs, logger); err != nil {
 		return fmt.Errorf("loading ebpf spec: %w", err)
 	}
 
@@ -206,7 +210,7 @@ func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 	t.config.MinLatency = params.Get(ParamMin).AsDuration()
 
 	defer t.close()
-	if err := t.install(); err != nil {
+	if err := t.install(gadgetCtx.Logger()); err != nil {
 		return fmt.Errorf("installing tracer: %w", err)
 	}
 

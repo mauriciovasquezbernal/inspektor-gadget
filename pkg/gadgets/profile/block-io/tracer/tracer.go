@@ -24,11 +24,13 @@ import (
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/link"
 	"github.com/moby/moby/pkg/parsers/kernel"
+	log "github.com/sirupsen/logrus"
 
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/profile/block-io/types"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/histogram"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 )
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target $TARGET -type hist -type hist_key -cc clang biolatency ./bpf/biolatency.bpf.c -- -I./bpf/ -I../../../../${TARGET} -I ../../../common/
@@ -44,7 +46,9 @@ type Tracer struct {
 func NewTracer() (*Tracer, error) {
 	t := &Tracer{}
 
-	if err := t.install(); err != nil {
+	localLog := log.New()
+	localLog.SetLevel(log.GetLevel())
+	if err := t.install(localLog); err != nil {
 		t.Stop()
 		return nil, err
 	}
@@ -95,7 +99,7 @@ func (t *Tracer) close() {
 	t.objs.Close()
 }
 
-func (t *Tracer) install() error {
+func (t *Tracer) install(logger logger.Logger) error {
 	var spec *ebpf.CollectionSpec
 
 	version, err := kernel.GetKernelVersion()
@@ -147,7 +151,7 @@ func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 
 func (t *Tracer) RunWithResult(gadgetCtx gadgets.GadgetContext) ([]byte, error) {
 	defer t.close()
-	if err := t.install(); err != nil {
+	if err := t.install(gadgetCtx.Logger()); err != nil {
 		return nil, fmt.Errorf("installing tracer: %w", err)
 	}
 

@@ -33,6 +33,7 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	processcollectortypes "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/snapshot/process/types"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 )
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target bpfel -cc clang processCollector ./bpf/process-collector.bpf.c -- -I../../../../${TARGET} -I ../../../common/ -Werror -O2 -g -c -x c
@@ -48,8 +49,8 @@ func init() {
 	hostRoot = os.Getenv("HOST_ROOT")
 }
 
-func RunCollector(config *Config, enricher gadgets.DataEnricherByMntNs) ([]*processcollectortypes.Event, error) {
-	events, err := runeBPFCollector(config, enricher)
+func RunCollector(config *Config, enricher gadgets.DataEnricherByMntNs, logger logger.Logger) ([]*processcollectortypes.Event, error) {
+	events, err := runeBPFCollector(config, enricher, logger)
 	if err == nil {
 		return events, nil
 	}
@@ -66,7 +67,7 @@ func RunCollector(config *Config, enricher gadgets.DataEnricherByMntNs) ([]*proc
 	return events, err
 }
 
-func runeBPFCollector(config *Config, enricher gadgets.DataEnricherByMntNs) ([]*processcollectortypes.Event, error) {
+func runeBPFCollector(config *Config, enricher gadgets.DataEnricherByMntNs, logger logger.Logger) ([]*processcollectortypes.Event, error) {
 	spec, err := loadProcessCollector()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load ebpf program: %w", err)
@@ -77,7 +78,7 @@ func runeBPFCollector(config *Config, enricher gadgets.DataEnricherByMntNs) ([]*
 	}
 	objs := processCollectorObjects{}
 
-	if err := gadgets.LoadeBPFSpec(config.MountnsMap, spec, consts, &objs); err != nil {
+	if err := gadgets.LoadeBPFSpec(config.MountnsMap, spec, consts, &objs, logger); err != nil {
 		return nil, fmt.Errorf("loading ebpf spec: %w", err)
 	}
 
@@ -283,7 +284,7 @@ func (t *Tracer) SetMountNsMap(mntnsMap *ebpf.Map) {
 func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 	t.config.ShowThreads = gadgetCtx.GadgetParams().Get(ParamThreads).AsBool()
 
-	processes, err := RunCollector(t.config, nil)
+	processes, err := RunCollector(t.config, nil, gadgetCtx.Logger())
 	if err != nil {
 		return fmt.Errorf("running snapshotter: %w", err)
 	}

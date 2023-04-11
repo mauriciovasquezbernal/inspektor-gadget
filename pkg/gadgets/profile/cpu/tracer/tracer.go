@@ -35,6 +35,7 @@ import (
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/profile/cpu/types"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
 
@@ -70,7 +71,9 @@ func NewTracer(enricher gadgets.DataEnricherByMntNs, config *Config) (*Tracer, e
 		config:   config,
 	}
 
-	if err := t.install(); err != nil {
+	localLog := log.New()
+	localLog.SetLevel(log.GetLevel())
+	if err := t.install(localLog); err != nil {
 		t.Stop()
 		return nil, err
 	}
@@ -321,7 +324,7 @@ func (t *Tracer) collectResult() ([]byte, error) {
 	return json.Marshal(reports)
 }
 
-func (t *Tracer) install() error {
+func (t *Tracer) install(logger logger.Logger) error {
 	spec, err := loadProfile()
 	if err != nil {
 		return fmt.Errorf("failed to load ebpf program: %w", err)
@@ -332,7 +335,7 @@ func (t *Tracer) install() error {
 		"user_stacks_only":   t.config.UserStackOnly,
 	}
 
-	if err := gadgets.LoadeBPFSpec(t.config.MountnsMap, spec, consts, &t.objs); err != nil {
+	if err := gadgets.LoadeBPFSpec(t.config.MountnsMap, spec, consts, &t.objs, logger); err != nil {
 		return fmt.Errorf("loading ebpf spec: %w", err)
 	}
 
@@ -389,7 +392,7 @@ func (t *TracerWrap) Run(gadgetCtx gadgets.GadgetContext) error {
 	t.config.KernelStackOnly = params.Get(ParamKernelStack).AsBool()
 
 	defer t.close()
-	if err := t.install(); err != nil {
+	if err := t.install(gadgetCtx.Logger()); err != nil {
 		return fmt.Errorf("installing tracer: %w", err)
 	}
 
