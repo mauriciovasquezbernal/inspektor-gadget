@@ -36,6 +36,11 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/status"
 
+	// This is a blank include that actually imports all gadgets
+	// TODO: traceloop is imported separately because it is not in all-gadgets
+	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/all-gadgets"
+	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/traceloop/tracer"
+
 	gadgetservice "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-service"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgettracermanager"
 	pb "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgettracermanager/api"
