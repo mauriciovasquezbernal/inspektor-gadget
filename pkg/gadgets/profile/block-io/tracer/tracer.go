@@ -82,6 +82,13 @@ func getReport(histMap *ebpf.Map) (types.Report, error) {
 		})
 	}
 
+	// Slots are 0-indexed, so we need to increment indexMax to get the number
+	// of slots. Do not increment if indexMax is 0 because it means that there
+	// are no slots.
+	if indexMax > 0 {
+		indexMax++
+	}
+
 	report.Data = data[:indexMax]
 
 	return report, nil
