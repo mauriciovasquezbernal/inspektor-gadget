@@ -18,12 +18,15 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"sort"
 	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	k8syaml "sigs.k8s.io/yaml"
 
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/common/frontends"
@@ -170,7 +173,8 @@ func buildCommandFromGadget(
 			if verbose {
 				log.SetLevel(log.DebugLevel)
 			}
-			return nil
+
+			return handleFileArguments(cmd)
 		},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			err := runtime.Init(runtimeGlobalParams)
@@ -516,6 +520,38 @@ func buildCommandFromGadget(
 		addFlags(cmd, operatorParams, skipParams, runtime)
 	}
 	return cmd
+}
+
+func handleFileArguments(cmd *cobra.Command) error {
+	var outErr error
+	cmd.Flags().VisitAll(func(f *pflag.Flag) {
+		if outErr != nil {
+			return
+		}
+		outErr = handleFileArgument(f)
+	})
+	return outErr
+}
+
+func handleFileArgument(f *pflag.Flag) error {
+	if f.Value.Type() == "string" && strings.HasPrefix(f.Value.String(), "@") {
+		path := f.Value.String()[1:]
+		log.Debugf("Reading for parameter %q from file %q", f.Name, path)
+
+		file, err := os.Open(path)
+		if err != nil {
+			return fmt.Errorf("failed to open file %s: %w", path, err)
+		}
+		defer file.Close()
+
+		sb := &strings.Builder{}
+		io.Copy(sb, file)
+		if _, err := io.Copy(sb, file); err != nil {
+			return fmt.Errorf("failed to copy file %s to string: %w", path, err)
+		}
+		f.Value.Set(sb.String())
+	}
+	return nil
 }
 
 func mustSkip(skipParams []params.ValueHint, valueHint params.ValueHint) bool {
