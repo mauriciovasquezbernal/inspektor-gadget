@@ -95,6 +95,7 @@ func GetColumns() *columns.Columns[Event] {
 			return e.Saddr + ":" + fmt.Sprint(e.Sport)
 		},
 		Visible: true,
+		Width:   30,
 		Order:   2000,
 	})
 	if err != nil {
@@ -114,6 +115,7 @@ func GetColumns() *columns.Columns[Event] {
 			return e.Daddr + ":" + fmt.Sprint(e.Dport)
 		},
 		Visible: true,
+		Width:   30,
 		Order:   3000,
 	})
 	if err != nil {
