@@ -75,10 +75,16 @@ func getReport(histMap *ebpf.Map) (types.Report, error) {
 			indexMax = i
 		}
 
+		start := uint64(1) << i
+		end := (uint64(1) << (i + 1)) - 1
+		if start == end {
+			start -= 1
+		}
+
 		data = append(data, types.Data{
 			Count:         uint64(val),
-			IntervalStart: (uint64(1) << (i + 1)) >> 1,
-			IntervalEnd:   (uint64(1) << (i + 1)) - 1,
+			IntervalStart: start,
+			IntervalEnd:   end,
 		})
 	}
 
