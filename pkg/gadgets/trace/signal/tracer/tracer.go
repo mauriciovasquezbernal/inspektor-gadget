@@ -37,7 +37,7 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target bpfel -cc clang -type event sigsnoop ./bpf/sigsnoop.bpf.c -- -I../../../../${TARGET}
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target bpfel -cc clang -type event sigsnoop ./bpf/sigsnoop.bpf.c -- -I../../../../${TARGET} -I ../../../common/
 
 type Config struct {
 	MountnsMap   *ebpf.Map
