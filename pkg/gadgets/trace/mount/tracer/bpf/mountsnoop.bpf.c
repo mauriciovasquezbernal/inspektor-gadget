@@ -75,11 +75,6 @@ static int probe_exit(void *ctx, int ret)
 	int zero = 0;
 	u64 mntns_id;
 
-	mntns_id = get_mntns_id();
-
-	if (should_filter_mntns_id(mntns_id))
-		return 0;
-
 	argp = bpf_map_lookup_elem(&args, &tid);
 	if (!argp)
 		return 0;
@@ -94,7 +89,7 @@ static int probe_exit(void *ctx, int ret)
 	eventp->flags = argp->flags;
 	eventp->pid = pid;
 	eventp->tid = tid;
-	eventp->mnt_ns = mntns_id;
+	eventp->mnt_ns = get_mntns_id();
 	eventp->ret = ret;
 	eventp->op = argp->op;
 	bpf_get_current_comm(&eventp->comm, sizeof(eventp->comm));
