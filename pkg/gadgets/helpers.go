@@ -18,6 +18,7 @@ package gadgets
 
 import (
 	"encoding/binary"
+	"fmt"
 	"net/netip"
 	"sync"
 	"time"
@@ -231,4 +232,58 @@ func FixBpfKtimeGetBootNs(programSpecs map[string]*ebpf.ProgramSpec) {
 	for _, s := range programSpecs {
 		removeBpfKtimeGetBootNs(s)
 	}
+}
+
+// OptsWithMountnsMap adds an ebpf.Map to the ebpf.CollectionOptions and creates
+// the ebpf.CollectionOptions if it does not exist
+func OptsWithMountnsMap(opts *ebpf.CollectionOptions, mountnsMap *ebpf.Map) *ebpf.CollectionOptions {
+	if opts == nil {
+		opts = &ebpf.CollectionOptions{}
+	}
+	if opts.MapReplacements == nil {
+		opts.MapReplacements = map[string]*ebpf.Map{}
+	}
+	if mountnsMap != nil {
+		opts.MapReplacements["mount_ns_filter"] = mountnsMap
+	}
+
+	return opts
+}
+
+// LoadeBPFSpec collects operations that are duplicated across gadgets.
+// It replaces filter map and calls the necessary function to load
+// Maps and Programs into the kernel
+func LoadeBPFSpec(
+	mountnsMap *ebpf.Map,
+	spec *ebpf.CollectionSpec,
+	consts map[string]interface{},
+	objs interface{},
+) error {
+	FixBpfKtimeGetBootNs(spec.Programs)
+
+	mapReplacements := map[string]*ebpf.Map{}
+	filterByMntNs := false
+
+	if mountnsMap != nil {
+		filterByMntNs = true
+		mapReplacements["mount_ns_filter"] = mountnsMap
+	}
+
+	if consts == nil {
+		consts = map[string]interface{}{}
+	}
+
+	consts["filter_by_mnt_ns"] = filterByMntNs
+
+	if err := spec.RewriteConstants(consts); err != nil {
+		return fmt.Errorf("RewriteConstants: %w", err)
+	}
+
+	opts := OptsWithMountnsMap(nil, mountnsMap)
+
+	if err := spec.LoadAndAssign(objs, opts); err != nil {
+		return fmt.Errorf("loading maps and programs: %w", err)
+	}
+
+	return nil
 }
