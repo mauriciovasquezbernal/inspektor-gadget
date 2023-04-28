@@ -640,9 +640,6 @@ func WithLinuxNamespaceEnrichment() ContainerCollectionOption {
 func WithOCIConfigEnrichment() ContainerCollectionOption {
 	return func(cc *ContainerCollection) error {
 		cc.containerEnrichers = append(cc.containerEnrichers, func(container *Container) bool {
-			if container.Name != "" {
-				return true
-			}
 			if container.OciConfig == nil || container.IsEnriched() {
 				return true
 			}

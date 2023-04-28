@@ -99,13 +99,14 @@ type RuncNotifier struct {
 	// AddWatchContainerTermination.
 	//
 	// Keys: Container ID
-	containers map[string]*runcContainer
-	mu         sync.Mutex
+	containers   map[string]*runcContainer
+	containersMu sync.Mutex
 
 	// futureContainers
 	// Keys: Container ID
 	// Values: Container name
 	futureContainers map[string]*futureContainer
+	futureMu         sync.Mutex
 
 	// set to true when RuncNotifier is closed
 	closed bool
@@ -246,8 +247,8 @@ func cmdlineFromPid(pid int) []string {
 // containers detected by RuncNotifier, but it can also be called for
 // containers detected externally such as initial containers.
 func (n *RuncNotifier) AddWatchContainerTermination(containerID string, containerPID int) error {
-	n.mu.Lock()
-	defer n.mu.Unlock()
+	n.containersMu.Lock()
+	defer n.containersMu.Unlock()
 
 	if _, ok := n.containers[containerID]; ok {
 		// This container is already being watched for termination
@@ -305,7 +306,7 @@ func (n *RuncNotifier) watchContainersTermination() {
 			return
 		}
 
-		n.mu.Lock()
+		n.containersMu.Lock()
 
 		fds := make([]unix.PollFd, len(n.containers)+1)
 		// array to create a relation between the fd position and the container
@@ -323,7 +324,7 @@ func (n *RuncNotifier) watchContainersTermination() {
 			containersByIndex[i+1] = c
 			i++
 		}
-		n.mu.Unlock()
+		n.containersMu.Unlock()
 
 		count, err := unix.Poll(fds, -1)
 		if err != nil && !errors.Is(err, unix.EINTR) {
@@ -357,9 +358,9 @@ func (n *RuncNotifier) watchContainersTermination() {
 
 			unix.Close(c.pidfd)
 
-			n.mu.Lock()
+			n.containersMu.Lock()
 			delete(n.containers, c.id)
-			n.mu.Unlock()
+			n.containersMu.Unlock()
 		}
 	}
 }
@@ -390,9 +391,9 @@ func (n *RuncNotifier) watchContainersTerminationFallback() {
 					ContainerPID: uint32(c.pid),
 				})
 
-				n.mu.Lock()
+				n.containersMu.Lock()
 				delete(n.containers, c.id)
-				n.mu.Unlock()
+				n.containersMu.Unlock()
 			}
 		}
 	}
@@ -496,6 +497,11 @@ func (n *RuncNotifier) watchPidFileIterate(pidFileDirNotify *fanotify.NotifyFD, 
 		return true, nil
 	}
 
+	var containerName string
+	if fc, ok := n.checkOrGetFutureContainer(containerID); ok {
+		containerName = fc.name
+	}
+
 	n.callback(ContainerEvent{
 		Type:            EventTypeAddContainer,
 		Runtime:         "runc",
@@ -503,6 +509,7 @@ func (n *RuncNotifier) watchPidFileIterate(pidFileDirNotify *fanotify.NotifyFD, 
 		ContainerPID:    uint32(containerPID),
 		ContainerConfig: containerConfig,
 		Bundle:          bundleDir,
+		ContainerName:   containerName,
 	})
 
 	return true, nil
@@ -597,6 +604,8 @@ func (n *RuncNotifier) watchRunc() {
 }
 
 func (n *RuncNotifier) parseConmonCmdline(cmdlineArr []string) {
+	n.futureMu.Lock()
+	defer n.futureMu.Unlock()
 	if path.Base(cmdlineArr[0]) != "conmon" {
 		return
 	}
@@ -683,7 +692,7 @@ func (n *RuncNotifier) parseOCIRuntime(comm string, cmdlineArr []string) {
 	}
 
 	if comm == "crun" && startFound && containerID != "" {
-		if fc, ok := n.futureContainers[containerID]; ok {
+		if fc, ok := n.checkOrGetFutureContainer(containerID); ok {
 			bundleConfigJSON, err := os.ReadFile(filepath.Join(fc.bundleDir, "config.json"))
 			if err != nil {
 				log.Errorf("error reading bundle config: %v\n", err)
@@ -792,4 +801,11 @@ func (n *RuncNotifier) Close() {
 	}
 	n.runcBinaryNotify.File.Close()
 	n.wg.Wait()
+}
+
+func (n *RuncNotifier) checkOrGetFutureContainer(id string) (*futureContainer, bool) {
+	n.futureMu.Lock()
+	defer n.futureMu.Unlock()
+	fc, ok := n.futureContainers[id]
+	return fc, ok
 }
