@@ -546,7 +546,6 @@ func WithRuncFanotify() ContainerCollectionOption {
 			switch notif.Type {
 			case runcfanotify.EventTypeAddContainer:
 				container := &Container{
-					Runtime:   notif.Runtime,
 					ID:        notif.ContainerID,
 					Pid:       notif.ContainerPID,
 					OciConfig: notif.ContainerConfig,
@@ -642,6 +641,10 @@ func WithOCIConfigEnrichment() ContainerCollectionOption {
 		cc.containerEnrichers = append(cc.containerEnrichers, func(container *Container) bool {
 			if container.OciConfig == nil || container.IsEnriched() {
 				return true
+			}
+
+			if cm, ok := container.OciConfig.Annotations["io.container.manager"]; ok && cm == "libpod" {
+				container.Runtime = runtimeclient.PodmanName
 			}
 
 			resolver, err := ociannotations.NewResolverFromAnnotations(container.OciConfig.Annotations)

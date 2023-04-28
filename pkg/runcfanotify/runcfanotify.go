@@ -53,9 +53,6 @@ type ContainerEvent struct {
 	// Type is whether the container was added or removed
 	Type EventType
 
-	// Runtime is runc or crun
-	Runtime string
-
 	// ContainerID is the container id, typically a 64 hexadecimal string
 	ContainerID string
 
@@ -504,7 +501,6 @@ func (n *RuncNotifier) watchPidFileIterate(pidFileDirNotify *fanotify.NotifyFD, 
 
 	n.callback(ContainerEvent{
 		Type:            EventTypeAddContainer,
-		Runtime:         "runc",
 		ContainerID:     containerID,
 		ContainerPID:    uint32(containerPID),
 		ContainerConfig: containerConfig,
@@ -722,7 +718,6 @@ func (n *RuncNotifier) parseOCIRuntime(comm string, cmdlineArr []string) {
 
 			n.callback(ContainerEvent{
 				Type:            EventTypeAddContainer,
-				Runtime:         "crun",
 				ContainerID:     containerID,
 				ContainerPID:    uint32(containerPID),
 				ContainerConfig: containerConfig,
