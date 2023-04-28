@@ -244,7 +244,7 @@ func OptsWithMountnsMap(opts *ebpf.CollectionOptions, mountnsMap *ebpf.Map) *ebp
 		opts.MapReplacements = map[string]*ebpf.Map{}
 	}
 	if mountnsMap != nil {
-		opts.MapReplacements["mount_ns_filter"] = mountnsMap
+		opts.MapReplacements[MntNsFilterMapName] = mountnsMap
 	}
 
 	return opts
@@ -266,14 +266,14 @@ func LoadeBPFSpec(
 
 	if mountnsMap != nil {
 		filterByMntNs = true
-		mapReplacements["mount_ns_filter"] = mountnsMap
+		mapReplacements[MntNsFilterMapName] = mountnsMap
 	}
 
 	if consts == nil {
 		consts = map[string]interface{}{}
 	}
 
-	consts["filter_by_mnt_ns"] = filterByMntNs
+	consts[FilterByMntNsName] = filterByMntNs
 
 	if err := spec.RewriteConstants(consts); err != nil {
 		return fmt.Errorf("RewriteConstants: %w", err)
