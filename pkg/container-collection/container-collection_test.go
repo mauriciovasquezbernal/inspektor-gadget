@@ -16,6 +16,8 @@ package containercollection
 
 import (
 	"fmt"
+	"math/rand"
+	"sync"
 	"testing"
 	"time"
 
@@ -118,4 +120,92 @@ func TestWithTracerCollection(t *testing.T) {
 	cc.EnrichByMntNs(&ev, containers[0].Mntns)
 
 	require.Equal(t, expected, ev, "events should be equal")
+}
+
+func fillMaps() (int, *sync.Map, map[uint64]*Container, map[uint64][]*Container) {
+	syncMap := new(sync.Map)
+	mntNsMap := make(map[uint64]*Container)
+	netNsMap := make(map[uint64][]*Container)
+	entries := 100
+	for n := 0; n < entries; n++ {
+		containerID := fmt.Sprintf("container-%d", n)
+		container := &Container{
+			ID:    containerID,
+			Mntns: uint64(n),
+			Netns: uint64(n / 2),
+		}
+		syncMap.Store(uint32(n), container)
+		mntNsMap[container.Mntns] = container
+		if _, ok := netNsMap[container.Netns]; !ok {
+			netNsMap[container.Netns] = []*Container{container}
+		} else {
+			netNsMap[container.Netns] = append(netNsMap[container.Netns], container)
+		}
+	}
+	return entries, syncMap, mntNsMap, netNsMap
+}
+
+func BenchmarkSyncMapIter(b *testing.B) {
+	b.StopTimer()
+	entries, m, _, _ := fillMaps()
+	rnd := rand.New(rand.NewSource(0))
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		lookupContainerByMntns(m, uint64(rnd.Intn(entries)))
+	}
+}
+
+func BenchmarkSyncMapLookup(b *testing.B) {
+	b.StopTimer()
+	entries, m, _, _ := fillMaps()
+	rnd := rand.New(rand.NewSource(0))
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		m.Load(uint64(rnd.Intn(entries)))
+	}
+}
+
+func BenchmarkMutexedMapLookup(b *testing.B) {
+	b.StopTimer()
+	var mu sync.RWMutex
+	entries, _, m, _ := fillMaps()
+	rnd := rand.New(rand.NewSource(0))
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		mu.RLock()
+		_ = m[uint64(rnd.Intn(entries))]
+		mu.RUnlock()
+	}
+}
+
+func BenchmarkRangeMapArray(b *testing.B) {
+	b.StopTimer()
+	entries, m, _, _ := fillMaps()
+	rnd := rand.New(rand.NewSource(0))
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		lookupID := uint64(rnd.Intn(entries/2 - 1))
+		var containers []*Container
+		m.Range(func(key, value interface{}) bool {
+			c := value.(*Container)
+			if c.Netns == lookupID {
+				containers = append(containers, c)
+			}
+			return true
+		})
+	}
+}
+
+func BenchmarkMutexedMapArrayLookup(b *testing.B) {
+	b.StopTimer()
+	var mu sync.RWMutex
+	entries, _, _, m := fillMaps()
+	rnd := rand.New(rand.NewSource(0))
+	b.StartTimer()
+	for i := 0; i < b.N; i++ {
+		lookupID := uint64(rnd.Intn(entries/2 - 1))
+		mu.RLock()
+		_ = m[lookupID]
+		mu.RUnlock()
+	}
 }
