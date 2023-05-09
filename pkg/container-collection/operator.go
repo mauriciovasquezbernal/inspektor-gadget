@@ -21,7 +21,11 @@ import (
 func (cc *ContainerCollection) EnrichEventByMntNs(event operators.ContainerInfoFromMountNSID) {
 	event.SetNode(cc.nodeName)
 
-	container := cc.LookupContainerByMntns(event.GetMountNSID())
+	mountNsId := event.GetMountNSID()
+	container := cc.LookupContainerByMntns(mountNsId)
+	if container == nil && cc.cachedContainers != nil {
+		container = lookupContainerByMntns(cc.cachedContainers, mountNsId)
+	}
 	if container != nil {
 		event.SetContainerInfo(container.Podname, container.Namespace, container.Name)
 	}
