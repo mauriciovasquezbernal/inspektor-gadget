@@ -2,9 +2,6 @@ include $(shell pwd)/../../../minikube.mk
 
 DNSTESTER_IMAGE ?= "ghcr.io/inspektor-gadget/dnstester:latest"
 
-PODMAN_BUILDTAGS = exclude_graphdriver_btrfs exclude_graphdriver_devicemapper containers_image_openpgp
-BUILDTAGS ?= $(PODMAN_BUILDTAGS)
-
 # make does not allow implicit rules (with '%') to be phony so let's use
 # the 'phony_explicit' dependency to make implicit rules inherit the phony
 # attribute
@@ -19,7 +16,7 @@ build:
 
 .PHONY: build-tests
 build-tests:
-	docker buildx build -t ig-tests -f ./../../../Dockerfiles/ig-tests.Dockerfile --build-arg BUILDTAGS="$(BUILDTAGS)" ../../../
+	docker buildx build -t ig-tests -f ./../../../Dockerfiles/ig-tests.Dockerfile ../../../
 	docker run --rm --entrypoint cat ig-tests ig-integration.test > ./ig-integration.test
 
 # test

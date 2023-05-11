@@ -1,9 +1,5 @@
 ARG VERSION
 FROM golangci/golangci-lint:${VERSION}
-
-ARG BUILDTAGS=undefined
-ENV BUILDTAGS=${BUILDTAGS}
-
 # libseccomp-dev is needed because we use libseccomp-golang which needs the C
 # library.
 RUN apt-get update \
@@ -11,4 +7,4 @@ RUN apt-get update \
 
 # The timeout specified below is used by 'make lint'. Please keep in sync with
 # the timeout specified in .golangci.yml used by the CI.
-ENTRYPOINT golangci-lint run --fix --timeout=10m0s --build-tags="${BUILDTAGS}"
+ENTRYPOINT golangci-lint run --fix --timeout=10m0s

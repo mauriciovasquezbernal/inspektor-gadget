@@ -95,13 +95,6 @@ trace containers without Kubernetes. It can be built independently from the
 $ make ig
 ```
 
-### Build Tags
-
-Inspektor Gadgets uses build tags to skip building some parts of the code. Currently, this is used for [podman](https://github.com/containers/podman/tree/v4.5.0/pkg/bindings)
-since it requires passing tags (`exclude_graphdriver_btrfs exclude_graphdriver_devicemapper containers_image_openpgp`) to skip [container/image](https://github.com/containers/image) and
-[container/storage](https://github.com/containers/storage) features not used by us. In case you want to build with full podman support please refer to
-[podman build requirements](https://podman.io/getting-started/installation#building-from-scratch) to install the required dependencies.
-
 ## Testing
 
 ### Development environment on minikube

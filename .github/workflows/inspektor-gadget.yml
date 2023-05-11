@@ -5,7 +5,6 @@ env:
   GO_VERSION: 1.19.6
   AZURE_AKS_CLUSTER_PREFIX: ig-ci-aks-
   DEFAULT_DNSTESTER_IMAGE: ghcr.io/inspektor-gadget/dnstester:latest
-  BUILDTAGS: exclude_graphdriver_btrfs exclude_graphdriver_devicemapper containers_image_openpgp
 concurrency:
   group: ${{ github.ref }}
   # We do not want to cancel job in progress on main to be sure to catch new
@@ -91,7 +90,7 @@ jobs:
         working-directory: /home/runner/work/inspektor-gadget/inspektor-gadget
         # Workaround to display the output:
         # https://github.com/golangci/golangci-lint-action/issues/119#issuecomment-981090648
-        args: '--out-${NO_FUTURE}format colored-line-number --build-tags "${{ env.BUILDTAGS }}"'
+        args: "--out-${NO_FUTURE}format colored-line-number"
 
   ebpf-objects-checks:
     name: eBPF Object checks
@@ -531,7 +530,7 @@ jobs:
     - name: Build example binaries
       run: |
         for dir in $(dirname $(find examples/gadgets -name README.md)); do
-          go build -tags "${{ env.BUILDTAGS }}" ./$dir;
+          go build ./$dir;
         done
 
   test-unit:
@@ -578,7 +577,7 @@ jobs:
         echo "github.event.pull_request.head.repo.full_name: ${{ github.event.pull_request.head.repo.full_name }}"
         echo "github.repository: ${{ github.repository }}"
     - name: Run benchmarks
-      run: go test -tags "${{ env.BUILDTAGS }}" -exec sudo -bench=. -run=Benchmark ./pkg/gadgets/... ./internal/benchmarks/... | tee output.txt
+      run: go test -exec sudo -bench=. -run=Benchmark ./pkg/gadgets/... ./internal/benchmarks/... | tee output.txt
     #- name: Download previous benchmark data
     #  uses: actions/cache@v1
     #  with:

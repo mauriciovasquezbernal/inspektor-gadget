@@ -16,53 +16,80 @@ package podman
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"path/filepath"
+	"net"
+	"net/http"
+	"net/url"
+	"time"
 
-	"github.com/containers/podman/v4/pkg/bindings"
-	"github.com/containers/podman/v4/pkg/bindings/containers"
 	log "github.com/sirupsen/logrus"
 
 	runtimeclient "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils/runtime-client"
 )
 
+const (
+	defaultConnectionTimeout = 2 * time.Second
+	containerListAllURL      = "http://d/v4.0.0/libpod/containers/json?all=true"
+	containerInspectURL      = "http://d/v4.0.0/libpod/containers/%s/json"
+)
+
 type PodmanClient struct {
-	conn       context.Context
-	socketPath string
+	client http.Client
 }
 
-func NewPodmanClient(socketPath string) (runtimeclient.ContainerRuntimeClient, error) {
+func NewPodmanClient(socketPath string) runtimeclient.ContainerRuntimeClient {
 	if socketPath == "" {
 		socketPath = runtimeclient.PodmanDefaultSocketPath
 	}
 
-	conn, err := bindings.NewConnection(context.Background(), filepath.Join("unix://", socketPath))
-	if err != nil {
-		return nil, fmt.Errorf("error creating connection: %w", err)
-	}
-
 	return &PodmanClient{
-		conn:       conn,
-		socketPath: socketPath,
-	}, nil
+		client: http.Client{
+			Transport: &http.Transport{
+				DialContext: func(ctx context.Context, _, _ string) (conn net.Conn, err error) {
+					return net.Dial("unix", socketPath)
+				},
+			},
+			Timeout: defaultConnectionTimeout,
+		},
+	}
 }
 
-func (p PodmanClient) listContainers(filterContainer string) ([]*runtimeclient.ContainerData, error) {
-	filters := make(map[string][]string)
-	if filterContainer != "" {
-		filters["id"] = []string{filterContainer}
-	}
-	ctrs, err := containers.List(p.conn, &containers.ListOptions{Filters: filters})
-	if err != nil {
-		return nil, fmt.Errorf("error listing containers via podman: %w", err)
+func (p PodmanClient) listContainers(containerID string) ([]*runtimeclient.ContainerData, error) {
+	var filters string
+	if containerID != "" {
+		f, err := json.Marshal(map[string][]string{"id": {containerID}})
+		if err != nil {
+			return nil, fmt.Errorf("setting up filters: %w", err)
+		}
+		filters = "&filters=" + url.QueryEscape(string(f))
 	}
 
-	ret := make([]*runtimeclient.ContainerData, len(ctrs))
-	for i, c := range ctrs {
+	resp, err := p.client.Get(containerListAllURL + filters)
+	if err != nil {
+		return nil, fmt.Errorf("listing containers: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("listing containers via api: %s", resp.Status)
+	}
+
+	var containers []struct {
+		ID    string   `json:"Id"`
+		Names []string `json:"Names"`
+		State string   `json:"State"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&containers); err != nil {
+		return nil, fmt.Errorf("decoding containers: %w", err)
+	}
+
+	ret := make([]*runtimeclient.ContainerData, len(containers))
+	for i, c := range containers {
 		ret[i] = &runtimeclient.ContainerData{
 			ID:      c.ID,
 			Name:    c.Names[0],
-			State:   c.State,
+			State:   containerStatusStateToRuntimeClientState(c.State),
 			Runtime: runtimeclient.PodmanName,
 		}
 	}
@@ -70,46 +97,81 @@ func (p PodmanClient) listContainers(filterContainer string) ([]*runtimeclient.C
 }
 
 func (p PodmanClient) GetContainers() ([]*runtimeclient.ContainerData, error) {
-	ctrs, err := p.listContainers("")
+	containers, err := p.listContainers("")
 	if err != nil {
 		return nil, err
 	}
-	return ctrs, nil
+	return containers, nil
 }
 
 func (p PodmanClient) GetContainer(containerID string) (*runtimeclient.ContainerData, error) {
-	ctrs, err := p.listContainers(containerID)
+	containers, err := p.listContainers(containerID)
 	if err != nil {
-		return nil, fmt.Errorf("error listing containers: %w", err)
+		return nil, fmt.Errorf("listing containers: %w", err)
 	}
-	if len(ctrs) == 0 {
+	if len(containers) == 0 {
 		return nil, fmt.Errorf("container %q not found", containerID)
 	}
-	if len(ctrs) > 1 {
+	if len(containers) > 1 {
 		log.Warnf("PodmanClient: multiple containers (%d) with ID %q. Taking the first one: %+v",
-			len(ctrs), containerID, ctrs)
+			len(containers), containerID, containers)
 	}
-	return ctrs[0], nil
+	return containers[0], nil
 }
 
 func (p PodmanClient) GetContainerDetails(containerID string) (*runtimeclient.ContainerDetailsData, error) {
-	c, err := containers.Inspect(p.conn, containerID, nil)
+	resp, err := p.client.Get(fmt.Sprintf(containerInspectURL, containerID))
 	if err != nil {
-		return nil, fmt.Errorf("error inspecting container %q: %w", containerID, err)
+		return nil, fmt.Errorf("inspecting container %q: %w", containerID, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("inspecting container via api %q: %s", containerID, resp.Status)
+	}
+
+	var container struct {
+		ID    string `json:"Id"`
+		Name  string `json:"Name"`
+		State struct {
+			Status     string `json:"Status"`
+			Pid        int    `json:"Pid"`
+			CgroupPath string `json:"CgroupPath"`
+		} `json:"State"`
+	}
+
+	if err = json.NewDecoder(resp.Body).Decode(&container); err != nil {
+		return nil, fmt.Errorf("decoding container %q: %w", containerID, err)
 	}
 
 	return &runtimeclient.ContainerDetailsData{
 		ContainerData: runtimeclient.ContainerData{
-			ID:      c.ID,
-			Name:    c.Name,
-			State:   c.State.Status,
+			ID:      container.ID,
+			Name:    container.Name,
+			State:   containerStatusStateToRuntimeClientState(container.State.Status),
 			Runtime: runtimeclient.PodmanName,
 		},
-		Pid:         c.State.Pid,
-		CgroupsPath: c.State.CgroupPath,
+		Pid:         container.State.Pid,
+		CgroupsPath: container.State.CgroupPath,
 	}, nil
 }
 
 func (p PodmanClient) Close() error {
 	return nil
+}
+
+func containerStatusStateToRuntimeClientState(containerState string) (runtimeClientState string) {
+	switch containerState {
+	case "created":
+		runtimeClientState = runtimeclient.StateCreated
+	case "running":
+		runtimeClientState = runtimeclient.StateRunning
+	case "exited":
+		runtimeClientState = runtimeclient.StateExited
+	case "dead":
+		runtimeClientState = runtimeclient.StateExited
+	default:
+		runtimeClientState = runtimeclient.StateUnknown
+	}
+	return
 }

@@ -1,14 +1,11 @@
 CONTAINER_REPO ?= ghcr.io/inspektor-gadget/inspektor-gadget
 IMAGE_TAG ?= $(shell ../../tools/image-tag branch)
 
-PODMAN_BUILDTAGS = exclude_graphdriver_btrfs exclude_graphdriver_devicemapper containers_image_openpgp
-BUILDTAGS ?= $(PODMAN_BUILDTAGS)
-
 kube-container-collection: main.go
 	go build -o kube-container-collection main.go
 
 kube-container-collection-static: main.go
-	go build -o kube-container-collection-static -ldflags '-w -extldflags "-static"' -tags "$(BUILDTAGS)" main.go
+	go build -o kube-container-collection-static -ldflags '-w -extldflags "-static"' main.go
 
 build-container:
 	DOCKER_BUILDKIT=1 docker build -t $(CONTAINER_REPO)-kube-container-collection:$(IMAGE_TAG) -f Dockerfile ../..

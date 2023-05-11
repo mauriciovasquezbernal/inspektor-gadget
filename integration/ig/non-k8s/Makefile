@@ -1,8 +1,5 @@
 DNSTESTER_IMAGE ?= "ghcr.io/inspektor-gadget/dnstester:latest"
 
-PODMAN_BUILDTAGS = exclude_graphdriver_btrfs exclude_graphdriver_devicemapper containers_image_openpgp
-BUILDTAGS ?= $(PODMAN_BUILDTAGS)
-
 # build
 build:
 	make -C $(shell pwd)/../../.. ig
@@ -12,6 +9,6 @@ build:
 # INTEGRATION_TESTS_PARAMS="-test.run TestFilterByContainerName" make -C integration/ig/non-k8s test-docker
 test-docker: build
 	cp ../../../ig-linux-amd64 ig
-	go test -tags "$(BUILDTAGS)" -c -o ./ig-docker-integration.test ./...
+	go test -c -o ./ig-docker-integration.test ./...
 	sudo ./ig-docker-integration.test -test.v -integration -dnstester-image $(DNSTESTER_IMAGE) $${INTEGRATION_TESTS_PARAMS}
 	rm -f ./ig-docker-integration.test ./ig

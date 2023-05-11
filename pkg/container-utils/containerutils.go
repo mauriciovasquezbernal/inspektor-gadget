@@ -70,7 +70,7 @@ func NewContainerRuntimeClient(runtime *RuntimeConfig) (runtimeclient.ContainerR
 		if envsp := os.Getenv("INSPEKTOR_GADGET_PODMAN_SOCKETPATH"); envsp != "" && socketPath == "" {
 			socketPath = envsp
 		}
-		return podman.NewPodmanClient(socketPath)
+		return podman.NewPodmanClient(socketPath), nil
 	default:
 		return nil, fmt.Errorf("unknown container runtime: %s (available %s)",
 			runtime, strings.Join(AvailableRuntimes, ", "))

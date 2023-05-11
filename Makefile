@@ -28,14 +28,6 @@ IMAGE_FLAVOUR ?= "default"
 
 PLATFORMS ?= "linux/amd64,linux/arm64"
 
-# Given we only use podman bindings for listing/inspecting containers, we can skip certain features [1]
-# to avoid introducing build time dependencies [2]. They are mainly coming from containers/image and
-# containers/storage packages and we don't need them for now.
-# 1 - https://github.com/containers/podman/blob/v4.5.0/Makefile#L50
-# 2 - https://podman.io/getting-started/installation#building-from-scratch
-PODMAN_BUILDTAGS = exclude_graphdriver_btrfs exclude_graphdriver_devicemapper containers_image_openpgp
-BUILDTAGS ?= $(PODMAN_BUILDTAGS)
-
 # Adds a '-dirty' suffix to version string if there are uncommitted changes
 changes := $(shell git status --porcelain)
 ifeq ($(changes),)
@@ -103,7 +95,7 @@ ig-%: phony_explicit
 	echo Building ig-$* && \
 	export GOOS=$(shell echo $* |cut -f1 -d-) GOARCH=$(shell echo $* |cut -f2 -d-) && \
 	docker buildx build -t ig-$*-builder -f Dockerfiles/ig.Dockerfile \
-		--build-arg GOOS=$${GOOS} --build-arg GOARCH=$${GOARCH} --build-arg VERSION=$(VERSION) --build-arg BUILDTAGS="$(BUILDTAGS)" . && \
+		--build-arg GOOS=$${GOOS} --build-arg GOARCH=$${GOARCH} --build-arg VERSION=$(VERSION) . && \
 	docker run --rm --entrypoint cat ig-$*-builder ig-$* > ig-$* && \
 	chmod +x ig-$*
 
@@ -180,7 +172,7 @@ cross-kubectl-gadget-container:
 # tests
 .PHONY: test
 test:
-	go test -tags "$(BUILDTAGS)" -test.v ./...
+	go test -test.v ./...
 
 .PHONY: controller-tests
 controller-tests: kube-apiserver etcd kubectl
@@ -188,23 +180,23 @@ controller-tests: kube-apiserver etcd kubectl
 	TEST_ASSET_KUBE_APISERVER=$(KUBE_APISERVER_BIN) \
 	TEST_ASSET_ETCD=$(ETCD_BIN) \
 	TEST_ASSET_KUBECTL=$(KUBECTL_BIN) \
-	go test -tags "$(BUILDTAGS)" -test.v ./pkg/controllers/... -controller-test
+	go test -test.v ./pkg/controllers/... -controller-test
 
 .PHONY: gadgets-unit-tests
 gadgets-unit-tests:
-	go test -tags "$(BUILDTAGS)" -test.v -exec sudo ./pkg/gadgets/...
+	go test -test.v -exec sudo ./pkg/gadgets/...
 
 # Individual tests can be selected with a command such as:
 # go test -exec sudo -bench='^BenchmarkAllGadgetsWithContainers$/^container10$/trace-tcpconnect' -run=Benchmark ./internal/benchmarks/...
 .PHONY: gadgets-benchmarks
 gadgets-benchmarks:
-	go test -tags "$(BUILDTAGS)" -exec sudo -bench=. -run=Benchmark ./pkg/gadgets/... ./internal/benchmarks/...
+	go test -exec sudo -bench=. -run=Benchmark ./pkg/gadgets/... ./internal/benchmarks/...
 
 .PHONY: ig-tests
 ig-tests:
 	# Compile and execute in separate commands because Go might not be
 	# available in the root environment
-	go test -c ./pkg/ig-manager -tags "$(BUILDTAGS)"
+	go test -c ./pkg/ig-manager
 	sudo ./ig-manager.test -test.v -root-test $$IG_TESTS_PARAMS
 	rm -f ./ig-manager.test
 
@@ -217,7 +209,6 @@ integration-tests: kubectl-gadget
 			-v \
 			-integration \
 			-timeout 30m \
-			-tags "$(BUILDTAGS)" \
 			-k8s-distro $(KUBERNETES_DISTRIBUTION) \
 			-k8s-arch $(KUBERNETES_ARCHITECTURE) \
 			-image $(CONTAINER_REPO):$(IMAGE_TAG) \
@@ -226,12 +217,11 @@ integration-tests: kubectl-gadget
 			$$INTEGRATION_TESTS_PARAMS
 
 .PHONY: generate-documentation
-DOC_BUILDTAGS = "doc $(BUILDTAGS)"
 generate-documentation:
-	go run -tags $(DOC_BUILDTAGS) cmd/gen-doc/gen-doc.go -repo $(shell pwd)
+	go run -tags docs cmd/gen-doc/gen-doc.go -repo $(shell pwd)
 
 lint:
-	docker build -t linter -f Dockerfiles/linter.Dockerfile --build-arg VERSION=$(LINTER_VERSION) --build-arg BUILDTAGS="$(BUILDTAGS)" Dockerfiles
+	docker build -t linter -f Dockerfiles/linter.Dockerfile --build-arg VERSION=$(LINTER_VERSION) Dockerfiles
 # XDG_CACHE_HOME is necessary to avoid this type of errors:
 # ERRO Running error: context loading failed: failed to load packages: failed to load with go/packages: err: exit status 1: stderr: failed to initialize build cache at /.cache/go-build: mkdir /.cache: permission denied
 # Process 15167 has exited with status 3
