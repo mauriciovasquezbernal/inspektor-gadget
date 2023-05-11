@@ -461,6 +461,9 @@ func buildCommandFromGadget(
     columnName:value       - matches, if the content of columnName equals exactly value
     columnName:!value      - matches, if the content of columnName does not equal exactly value
     columnName:>=value     - matches, if the content of columnName is greater or equal to the value
+    columnName:>value      - matches, if the content of columnName is greater than the value
+    columnName:<=value     - matches, if the content of columnName is lower or equal to the value
+    columnName:<value      - matches, if the content of columnName is lower than the value
     columnName:~value      - matches, if the content of columnName matches the regular expression 'value'
                              see [https://github.com/google/re2/wiki/Syntax] for more information on the syntax
 `,
