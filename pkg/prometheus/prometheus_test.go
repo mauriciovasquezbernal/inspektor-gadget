@@ -107,7 +107,7 @@ import (
 
 // events that are generated in the test. Counters are increments based on them and the metric
 // configuration
-var testEvents = []stubEvent{
+var testEvents = []*stubEvent{
 	{Comm: "cat", Uid: 0, IntVal: 105, FloatVal: 201.2},
 	{Comm: "cat", Uid: 0, IntVal: 216, FloatVal: 423.3},
 	{Comm: "cat", Uid: 1000, IntVal: 327, FloatVal: 645.4},
@@ -123,6 +123,8 @@ func TestMetrics(t *testing.T) {
 		// outer key: metric name, inner key: attributes hash
 		expectedInt64Counters   map[string]map[string]int64
 		expectedFloat64Counters map[string]map[string]float64
+		expectedInt64Gauges     map[string]map[string]int64
+		//expectedFloat64Gauges   map[string]map[string]float64
 	}
 
 	tests := []testDefinition{
@@ -425,6 +427,7 @@ func TestMetrics(t *testing.T) {
 				"counter_with_float_field_aggregate_by_uid_and_filter_by_comm": {"uid=0,": 201.2 + 423.3, "uid=1000,": 645.4},
 			},
 		},
+		// Multiple counters
 		{
 			name: "counter_multiple_mixed",
 			config: &Config{
@@ -449,6 +452,23 @@ func TestMetrics(t *testing.T) {
 			},
 			expectedFloat64Counters: map[string]map[string]float64{
 				"counter_multiple1": {"": 201.2 + 423.3 + 645.4 + 867.5 + 1089.6},
+			},
+		},
+		// Gauges
+		{
+			name: "gauge_no_labels_nor_filtering",
+			config: &Config{
+				Metrics: []Metric{
+					{
+						Name:     "gauge_no_labels_nor_filtering",
+						Type:     "gauge",
+						Category: "snapshot",
+						Gadget:   "stubsnapshotter",
+					},
+				},
+			},
+			expectedInt64Gauges: map[string]map[string]int64{
+				"gauge_no_labels_nor_filtering": {"": 5},
 			},
 		},
 	}
@@ -477,33 +497,43 @@ func TestMetrics(t *testing.T) {
 
 			require.Equal(t, len(test.expectedInt64Counters), len(meter.int64counters))
 			require.Equal(t, len(test.expectedFloat64Counters), len(meter.float64counters))
+			require.Equal(t, len(test.expectedInt64Gauges), len(meter.int64gauges))
 
-			// Wait for the tracer to run
-			//select {
-			//case <-time.After(1 * time.Second):
-			//	require.Fail(t, "timeout waiting for tracer to run")
-			//case <-c:
-			//}
 			// TODO: timeout?
 			// https://stackoverflow.com/questions/32840687/timeout-for-waitgroup-wait
+
+			// Collect metrics: Update gauges
+			err = meter.Collect(ctx)
+			require.Nil(t, err, "failed to collect metrics")
+
+			// wait for the tracers to run
 			wg.Wait()
 
-			// check that all counters are created and have the expected values
+			// int64 counters
 			for name, expected := range test.expectedInt64Counters {
 				counter, ok := meter.int64counters[name]
-				require.True(t, ok, "counter %q not found", name)
+				require.True(t, ok, "int64 counter %q not found", name)
 
 				require.Equal(t, expected, counter.values, "counter values are wrong")
 			}
 
-			// check that all counters are created and have the expected values
+			// float64 counters
 			for name, expected := range test.expectedFloat64Counters {
 				counter, ok := meter.float64counters[name]
-				require.True(t, ok, "counter %q not found", name)
+				require.True(t, ok, "float64 counter %q not found", name)
 
 				//require.Equal doesn't work because of float comparisons
 				require.InDeltaMapValues(t, expected, counter.values, 0.01, "counter values are wrong")
 			}
+
+			// int64 gauges
+			for name, expected := range test.expectedInt64Gauges {
+				counter, ok := meter.int64gauges[name]
+				require.True(t, ok, "int64 gauge %q not found", name)
+
+				require.Equal(t, expected, counter.values, "counter values are wrong")
+			}
+
 		})
 	}
 }

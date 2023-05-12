@@ -70,7 +70,7 @@ func (t *stubTracer) SetEventHandler(handler any) {
 
 func (t *stubTracer) Run(gadgetCtx gadgets.GadgetContext) error {
 	for _, ev := range testEvents {
-		t.eventCallback(&ev)
+		t.eventCallback(ev)
 	}
 
 	ctx := gadgetCtx.Context()
@@ -94,7 +94,7 @@ func (g *stubTracer) NewInstance() (gadgets.Gadget, error) {
 
 /*** stub snapshotter ***/
 type stubSnapshotter struct {
-	eventCallback func(ev *stubEvent)
+	eventCallback func(ev []*stubEvent)
 }
 
 func (t *stubSnapshotter) Name() string {
@@ -126,8 +126,8 @@ func (t *stubSnapshotter) EventPrototype() any {
 	return &stubEvent{}
 }
 
-func (t *stubSnapshotter) SetEventHandler(handler any) {
-	nh, ok := handler.(func(ev *stubEvent))
+func (t *stubSnapshotter) SetEventHandlerArray(handler any) {
+	nh, ok := handler.(func(ev []*stubEvent))
 	if !ok {
 		panic("event handler invalid")
 	}
@@ -135,23 +135,23 @@ func (t *stubSnapshotter) SetEventHandler(handler any) {
 }
 
 func (t *stubSnapshotter) Run(gadgetCtx gadgets.GadgetContext) error {
+	t.eventCallback(testEvents)
+
 	ctx := gadgetCtx.Context()
 
-	// Save pointer to this instance in context passed from above. This allows the test to have
-	// a reference to the gadget to be able to generate events.
+	// Tell the caller test that events were generated
 	if val := ctx.Value(valuekey); val != nil {
-		p := val.(chan (*stubSnapshotter))
-		p <- t
+		wg := val.(*sync.WaitGroup)
+		wg.Done()
 	}
-
-	gadgetcontext.WaitForTimeoutOrDone(gadgetCtx)
 
 	return nil
 }
 
 func (g *stubSnapshotter) NewInstance() (gadgets.Gadget, error) {
-	// TODO: this can be highly confusing!
-	return &stubTracer{}, nil
+	// stubSnapshotter is both the GadgetDesc and the Gadget implementation. We can keep those
+	// separated but there is not any reason to complicate this further.
+	return &stubSnapshotter{}, nil
 }
 
 func init() {
