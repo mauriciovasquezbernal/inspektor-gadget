@@ -1,6 +1,8 @@
 package prometheus
 
 import (
+	"sync"
+
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/columns"
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	gadgetregistry "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-registry"
@@ -16,16 +18,17 @@ const (
 	valuekey key = "pkey"
 )
 
-type stubTracerEvent struct {
+// stubEvent is shared by both stub gadgets just to keep it simpler
+type stubEvent struct {
 	Comm     string  `json:"comm,omitempty" column:"comm"`
 	Uid      uint32  `json:"uid,omitempty" column:"uid"`
 	IntVal   uint32  `json:"intval,omitempty" column:"intval"`
 	FloatVal float32 `json:"floatval,omitempty" column:"floatval"`
 }
 
-/*** stub tracer ***/
+// stubTracer is a fake tracer gadget used for testing
 type stubTracer struct {
-	eventCallback func(ev *stubTracerEvent)
+	eventCallback func(ev *stubEvent)
 }
 
 func (t *stubTracer) Name() string {
@@ -49,16 +52,16 @@ func (t *stubTracer) ParamDescs() params.ParamDescs {
 }
 
 func (t *stubTracer) Parser() parser.Parser {
-	cols := columns.MustCreateColumns[stubTracerEvent]()
+	cols := columns.MustCreateColumns[stubEvent]()
 	return parser.NewParser(cols)
 }
 
 func (t *stubTracer) EventPrototype() any {
-	return &stubTracerEvent{}
+	return &stubEvent{}
 }
 
 func (t *stubTracer) SetEventHandler(handler any) {
-	nh, ok := handler.(func(ev *stubTracerEvent))
+	nh, ok := handler.(func(ev *stubEvent))
 	if !ok {
 		panic("event handler invalid")
 	}
@@ -74,8 +77,8 @@ func (t *stubTracer) Run(gadgetCtx gadgets.GadgetContext) error {
 
 	// Tell the caller test that events were generated
 	if val := ctx.Value(valuekey); val != nil {
-		p := val.(chan (struct{}))
-		close(p)
+		wg := val.(*sync.WaitGroup)
+		wg.Done()
 	}
 
 	gadgetcontext.WaitForTimeoutOrDone(gadgetCtx)
@@ -84,13 +87,14 @@ func (t *stubTracer) Run(gadgetCtx gadgets.GadgetContext) error {
 }
 
 func (g *stubTracer) NewInstance() (gadgets.Gadget, error) {
-	// TODO: this can be highly confusing!
+	// stubTracer is both the GadgetDesc and the Gadget implementation. We can keep those
+	// separated but there is not any reason to complicate this further.
 	return &stubTracer{}, nil
 }
 
 /*** stub snapshotter ***/
 type stubSnapshotter struct {
-	eventCallback func(ev *stubTracerEvent)
+	eventCallback func(ev *stubEvent)
 }
 
 func (t *stubSnapshotter) Name() string {
@@ -114,16 +118,16 @@ func (t *stubSnapshotter) ParamDescs() params.ParamDescs {
 }
 
 func (t *stubSnapshotter) Parser() parser.Parser {
-	cols := columns.MustCreateColumns[stubTracerEvent]()
+	cols := columns.MustCreateColumns[stubEvent]()
 	return parser.NewParser(cols)
 }
 
 func (t *stubSnapshotter) EventPrototype() any {
-	return &stubTracerEvent{}
+	return &stubEvent{}
 }
 
 func (t *stubSnapshotter) SetEventHandler(handler any) {
-	nh, ok := handler.(func(ev *stubTracerEvent))
+	nh, ok := handler.(func(ev *stubEvent))
 	if !ok {
 		panic("event handler invalid")
 	}

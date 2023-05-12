@@ -16,8 +16,8 @@ package prometheus
 
 import (
 	"context"
+	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -107,27 +107,22 @@ import (
 
 // events that are generated in the test. Counters are increments based on them and the metric
 // configuration
-var testEvents = []stubTracerEvent{
-	// root executes cat twice
-	{Comm: "cat", Uid: 0},
-	{Comm: "cat", Uid: 0},
-
-	// user 1000 executes cat
-	{Comm: "cat", Uid: 1000},
-
-	// root executes ping
-	{Comm: "ping", Uid: 0},
-
-	// user 1000 executes ls
-	{Comm: "ls", Uid: 1000},
+var testEvents = []stubEvent{
+	{Comm: "cat", Uid: 0, IntVal: 105, FloatVal: 201.2},
+	{Comm: "cat", Uid: 0, IntVal: 216, FloatVal: 423.3},
+	{Comm: "cat", Uid: 1000, IntVal: 327, FloatVal: 645.4},
+	{Comm: "ping", Uid: 0, IntVal: 428, FloatVal: 867.5},
+	{Comm: "ls", Uid: 1000, IntVal: 429, FloatVal: 1089.6},
 }
 
 func TestMetrics(t *testing.T) {
 	type testDefinition struct {
-		name             string
-		config           *Config
-		expectedErr      bool
-		expectedCounters map[string]map[string]int64
+		name        string
+		config      *Config
+		expectedErr bool
+		// outer key: metric name, inner key: attributes hash
+		expectedInt64Counters   map[string]map[string]int64
+		expectedFloat64Counters map[string]map[string]float64
 	}
 
 	tests := []testDefinition{
@@ -246,17 +241,10 @@ func TestMetrics(t *testing.T) {
 						Category: "trace",
 						Gadget:   "stubtracer",
 					},
-					{
-						Name:     "counter_no_labels_nor_filtering2",
-						Type:     "counter",
-						Category: "trace",
-						Gadget:   "stubtracer",
-					},
 				},
 			},
-			expectedCounters: map[string]map[string]int64{
-				"counter_no_labels_nor_filtering":  {"": 5},
-				"counter_no_labels_nor_filtering2": {"": 5},
+			expectedInt64Counters: map[string]map[string]int64{
+				"counter_no_labels_nor_filtering": {"": 5},
 			},
 		},
 		{
@@ -272,7 +260,7 @@ func TestMetrics(t *testing.T) {
 					},
 				},
 			},
-			expectedCounters: map[string]map[string]int64{
+			expectedInt64Counters: map[string]map[string]int64{
 				"counter_filter_only_root_events": {"": 3},
 			},
 		},
@@ -289,7 +277,7 @@ func TestMetrics(t *testing.T) {
 					},
 				},
 			},
-			expectedCounters: map[string]map[string]int64{
+			expectedInt64Counters: map[string]map[string]int64{
 				"counter_filter_only_root_cat_events": {"": 2},
 			},
 		},
@@ -306,7 +294,7 @@ func TestMetrics(t *testing.T) {
 					},
 				},
 			},
-			expectedCounters: map[string]map[string]int64{
+			expectedInt64Counters: map[string]map[string]int64{
 				"counter_filter_uid_greater_than_0": {"": 2},
 			},
 		},
@@ -323,7 +311,7 @@ func TestMetrics(t *testing.T) {
 					},
 				},
 			},
-			expectedCounters: map[string]map[string]int64{
+			expectedInt64Counters: map[string]map[string]int64{
 				"counter_aggregate_by_comm": {"comm=cat,": 3, "comm=ping,": 1, "comm=ls,": 1},
 			},
 		},
@@ -340,7 +328,7 @@ func TestMetrics(t *testing.T) {
 					},
 				},
 			},
-			expectedCounters: map[string]map[string]int64{
+			expectedInt64Counters: map[string]map[string]int64{
 				"counter_aggregate_by_uid": {"uid=0,": 3, "uid=1000,": 2},
 			},
 		},
@@ -357,7 +345,7 @@ func TestMetrics(t *testing.T) {
 					},
 				},
 			},
-			expectedCounters: map[string]map[string]int64{
+			expectedInt64Counters: map[string]map[string]int64{
 				"counter_aggregate_by_uid_and_comm": {
 					"uid=0,comm=cat,":    2,
 					"uid=1000,comm=cat,": 1,
@@ -380,8 +368,87 @@ func TestMetrics(t *testing.T) {
 					},
 				},
 			},
-			expectedCounters: map[string]map[string]int64{
+			expectedInt64Counters: map[string]map[string]int64{
 				"counter_aggregate_by_uid_and_filter_by_comm": {"uid=0,": 2, "uid=1000,": 1},
+			},
+		},
+		{
+			name: "counter_with_int_field",
+			config: &Config{
+				Metrics: []Metric{
+					{
+						Name:     "counter_with_int_field",
+						Type:     "counter",
+						Category: "trace",
+						Gadget:   "stubtracer",
+						Field:    "intval",
+					},
+				},
+			},
+			expectedInt64Counters: map[string]map[string]int64{
+				"counter_with_int_field": {"": 105 + 216 + 327 + 428 + 429},
+			},
+		},
+		{
+			name: "counter_with_float_field",
+			config: &Config{
+				Metrics: []Metric{
+					{
+						Name:     "counter_with_float_field",
+						Type:     "counter",
+						Category: "trace",
+						Gadget:   "stubtracer",
+						Field:    "floatval",
+					},
+				},
+			},
+			expectedFloat64Counters: map[string]map[string]float64{
+				"counter_with_float_field": {"": 201.2 + 423.3 + 645.4 + 867.5 + 1089.6},
+			},
+		},
+		{
+			name: "counter_with_float_field_aggregate_by_uid_and_filter_by_comm",
+			config: &Config{
+				Metrics: []Metric{
+					{
+						Name:     "counter_with_float_field_aggregate_by_uid_and_filter_by_comm",
+						Type:     "counter",
+						Category: "trace",
+						Gadget:   "stubtracer",
+						Field:    "floatval",
+						Selector: []string{"comm:cat"},
+						Labels:   []string{"uid"},
+					},
+				},
+			},
+			expectedFloat64Counters: map[string]map[string]float64{
+				"counter_with_float_field_aggregate_by_uid_and_filter_by_comm": {"uid=0,": 201.2 + 423.3, "uid=1000,": 645.4},
+			},
+		},
+		{
+			name: "counter_multiple_mixed",
+			config: &Config{
+				Metrics: []Metric{
+					{
+						Name:     "counter_multiple1",
+						Type:     "counter",
+						Category: "trace",
+						Gadget:   "stubtracer",
+						Field:    "floatval",
+					},
+					{
+						Name:     "counter_multiple2",
+						Type:     "counter",
+						Category: "trace",
+						Gadget:   "stubtracer",
+					},
+				},
+			},
+			expectedInt64Counters: map[string]map[string]int64{
+				"counter_multiple2": {"": 5},
+			},
+			expectedFloat64Counters: map[string]map[string]float64{
+				"counter_multiple1": {"": 201.2 + 423.3 + 645.4 + 867.5 + 1089.6},
 			},
 		},
 	}
@@ -394,8 +461,9 @@ func TestMetrics(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			t.Cleanup(cancel)
 
-			c := make(chan struct{}, 1)
-			ctx = context.WithValue(ctx, valuekey, c)
+			wg := &sync.WaitGroup{}
+			wg.Add(len(test.config.Metrics))
+			ctx = context.WithValue(ctx, valuekey, wg)
 
 			meter := NewStubMeter(t)
 
@@ -407,21 +475,34 @@ func TestMetrics(t *testing.T) {
 			require.Nil(t, err)
 			t.Cleanup(cleanup)
 
-			require.Equal(t, len(test.expectedCounters), len(meter.int64counters))
+			require.Equal(t, len(test.expectedInt64Counters), len(meter.int64counters))
+			require.Equal(t, len(test.expectedFloat64Counters), len(meter.float64counters))
 
 			// Wait for the tracer to run
-			select {
-			case <-time.After(1 * time.Second):
-				require.Fail(t, "timeout waiting for tracer to run")
-			case <-c:
-			}
+			//select {
+			//case <-time.After(1 * time.Second):
+			//	require.Fail(t, "timeout waiting for tracer to run")
+			//case <-c:
+			//}
+			// TODO: timeout?
+			// https://stackoverflow.com/questions/32840687/timeout-for-waitgroup-wait
+			wg.Wait()
 
 			// check that all counters are created and have the expected values
-			for name, expected := range test.expectedCounters {
+			for name, expected := range test.expectedInt64Counters {
 				counter, ok := meter.int64counters[name]
 				require.True(t, ok, "counter %q not found", name)
 
 				require.Equal(t, expected, counter.values, "counter values are wrong")
+			}
+
+			// check that all counters are created and have the expected values
+			for name, expected := range test.expectedFloat64Counters {
+				counter, ok := meter.float64counters[name]
+				require.True(t, ok, "counter %q not found", name)
+
+				//require.Equal doesn't work because of float comparisons
+				require.InDeltaMapValues(t, expected, counter.values, 0.01, "counter values are wrong")
 			}
 		})
 	}
