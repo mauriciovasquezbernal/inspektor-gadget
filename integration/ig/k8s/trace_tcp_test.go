@@ -20,6 +20,7 @@ import (
 
 	. "github.com/inspektor-gadget/inspektor-gadget/integration"
 	tcpTypes "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/trace/tcp/types"
+	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
 
 func TestTraceTCP(t *testing.T) {
@@ -35,9 +36,14 @@ func TestTraceTCP(t *testing.T) {
 				Event:     BuildBaseEvent(ns),
 				Comm:      "curl",
 				IPVersion: 4,
-				Saddr:     "127.0.0.1",
-				Daddr:     "127.0.0.1",
-				Dport:     80,
+				SrcEndpoint: eventtypes.Endpoint{
+					Addr: "127.0.0.1",
+				},
+
+				DstEndpoint: eventtypes.Endpoint{
+					Addr: "127.0.0.1",
+					Port: 80,
+				},
 				Operation: "connect",
 			}
 
@@ -50,7 +56,7 @@ func TestTraceTCP(t *testing.T) {
 
 				e.Timestamp = 0
 				e.Pid = 0
-				e.Sport = 0
+				e.SrcEndpoint.Port = 0
 				e.MountNsID = 0
 			}
 
