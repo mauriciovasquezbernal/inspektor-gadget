@@ -22,89 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-//func TestCreateMetrics(t *testing.T) {
-//	t.Parallel()
-//
-//	type testDefinition struct {
-//		name          string
-//		config        *Config
-//		errExpected   bool
-//		expectedCalls []string
-//	}
-//
-//	tests := []testDefinition{
-//		{
-//			name: "counter",
-//			config: &Config{
-//				Metrics: []Metric{
-//					{
-//						Name:     "metricname",
-//						Type:     "counter",
-//						Category: "trace",
-//						Gadget:   "stubtracer",
-//					},
-//				},
-//			},
-//			errExpected:   false,
-//			expectedCalls: []string{"Int64Counter"},
-//		},
-//		{
-//			name: "gauge",
-//			config: &Config{
-//				Metrics: []Metric{
-//					{
-//						Name:     "processes",
-//						Type:     "gauge",
-//						Category: "snapshot",
-//						Gadget:   "stubsnapshotter",
-//					},
-//				},
-//			},
-//			errExpected:   false,
-//			expectedCalls: []string{"Int64ObservableGauge", "RegisterCallback"},
-//		},
-//		{
-//			name: "wrong gadget type for gauge",
-//			config: &Config{
-//				Metrics: []Metric{
-//					{
-//						Name:     "metricname",
-//						Type:     "gauge",
-//						Category: "trace",
-//						Gadget:   "stubtracer",
-//					},
-//				},
-//			},
-//			errExpected: true,
-//		},
-//	}
-//
-//	for _, test := range tests {
-//		test := test
-//		t.Run(test.name, func(t *testing.T) {
-//			t.Parallel()
-//
-//			meter := NewStubMeter(t)
-//
-//			ctx, cancel := context.WithCancel(context.Background())
-//
-//			cleanup, err := CreateMetrics(ctx, test.config, meter)
-//			t.Cleanup(cancel)
-//			if test.errExpected {
-//				require.Error(t, err)
-//			} else {
-//				require.Nil(t, err)
-//				cleanup()
-//			}
-//
-//			require.Equal(t, test.expectedCalls, meter.calls)
-//
-//			// Give some time to trace to be run
-//			time.Sleep(1 * time.Second)
-//		})
-//	}
-//}
-
 // events that are generated in the test. Counters are increments based on them and the metric
 // configuration
 var testEvents = []*stubEvent{
@@ -456,6 +373,20 @@ func TestMetrics(t *testing.T) {
 		},
 		// Gauges
 		{
+			name: "gauge_wrong_gadget_type",
+			config: &Config{
+				Metrics: []Metric{
+					{
+						Name:     "gauge_wrong_gadget_type",
+						Type:     "gauge",
+						Category: "trace",
+						Gadget:   "stubtracer",
+					},
+				},
+			},
+			expectedErr: true,
+		},
+		{
 			name: "gauge_no_labels_nor_filtering",
 			config: &Config{
 				Metrics: []Metric{
@@ -469,6 +400,40 @@ func TestMetrics(t *testing.T) {
 			},
 			expectedInt64Gauges: map[string]map[string]int64{
 				"gauge_no_labels_nor_filtering": {"": 5},
+			},
+		},
+		{
+			name: "gauge_filter_only_root_events",
+			config: &Config{
+				Metrics: []Metric{
+					{
+						Name:     "gauge_filter_only_root_events",
+						Type:     "gauge",
+						Category: "snapshot",
+						Gadget:   "stubsnapshotter",
+						Selector: []string{"uid:0"},
+					},
+				},
+			},
+			expectedInt64Gauges: map[string]map[string]int64{
+				"gauge_filter_only_root_events": {"": 3},
+			},
+		},
+		{
+			name: "gauge_filter_only_root_cat_events",
+			config: &Config{
+				Metrics: []Metric{
+					{
+						Name:     "gauge_filter_only_root_cat_events",
+						Type:     "gauge",
+						Category: "snapshot",
+						Gadget:   "stubsnapshotter",
+						Selector: []string{"uid:0", "comm:cat"},
+					},
+				},
+			},
+			expectedInt64Gauges: map[string]map[string]int64{
+				"gauge_filter_only_root_cat_events": {"": 2},
 			},
 		},
 	}
@@ -528,10 +493,10 @@ func TestMetrics(t *testing.T) {
 
 			// int64 gauges
 			for name, expected := range test.expectedInt64Gauges {
-				counter, ok := meter.int64gauges[name]
+				gauge, ok := meter.int64gauges[name]
 				require.True(t, ok, "int64 gauge %q not found", name)
 
-				require.Equal(t, expected, counter.values, "counter values are wrong")
+				require.Equal(t, expected, gauge.values, "counter values are wrong")
 			}
 
 		})
