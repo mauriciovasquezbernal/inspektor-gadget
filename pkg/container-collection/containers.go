@@ -103,7 +103,7 @@ func (c *Container) GetOwnerReference() (*metav1.OwnerReference, error) {
 
 	err = ownerReferenceEnrichment(dynamicClient, c, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to enrich owner reference: %w", err)
+		return nil, fmt.Errorf("enriching owner reference: %w", err)
 	}
 
 	return c.ownerReference, nil
@@ -130,7 +130,7 @@ func ownerReferenceEnrichment(
 			ownerReferences, err = getOwnerReferences(dynamicClient,
 				resNamespace, resKind, resGroupVersion, resName)
 			if err != nil {
-				return fmt.Errorf("failed to get %s/%s/%s/%s owner reference: %w",
+				return fmt.Errorf("getting %s/%s/%s/%s owner reference: %w",
 					resNamespace, resKind, resGroupVersion, resName, err)
 			}
 
