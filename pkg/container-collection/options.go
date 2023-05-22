@@ -41,14 +41,10 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/runcfanotify"
 )
 
-var netnsHost uint64
+var hostRoot string
 
 func init() {
-	var err error
-	netnsHost, err = containerutils.GetNetNs(os.Getpid())
-	if err != nil {
-		panic(fmt.Sprintf("getting host net ns inode: %s", err))
-	}
+	hostRoot = os.Getenv("HOST_ROOT")
 }
 
 func enrichContainerWithContainerData(containerData *runtimeclient.ContainerData, container *Container) {
@@ -605,6 +601,13 @@ func WithCgroupEnrichment() ContainerCollectionOption {
 
 // WithLinuxNamespaceEnrichment enables an enricher to add the namespaces metadata
 func WithLinuxNamespaceEnrichment() ContainerCollectionOption {
+	// GetNetNs() needs a pid in the host pid namespace: it uses $HOST_ROOT/proc/$pid/ns/net
+	// This needs CAP_SYS_PTRACE.
+	netnsHost, err := containerutils.GetNetNs(1)
+	if err != nil {
+		panic(fmt.Sprintf("getting host net ns inode: %s", err))
+	}
+
 	return func(cc *ContainerCollection) error {
 		cc.containerEnrichers = append(cc.containerEnrichers, func(container *Container) bool {
 			pid := int(container.Pid)
