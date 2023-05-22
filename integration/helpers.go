@@ -203,6 +203,17 @@ func GetTestPodIP(ns string, podname string) (string, error) {
 	return string(r), nil
 }
 
+func GetPodIPFromLabel(ns string, label string) (string, error) {
+	cmd := exec.Command("kubectl", "-n", ns, "get", "pod", "-l", label, "-o", "jsonpath={.items[0].status.podIP}")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	r, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("%w: %s", err, stderr.String())
+	}
+	return string(r), nil
+}
+
 func GetPodNode(ns string, podname string) (string, error) {
 	cmd := exec.Command("kubectl", "-n", ns, "get", "pod", podname, "-o", "jsonpath={.spec.nodeName}")
 	var stderr bytes.Buffer
