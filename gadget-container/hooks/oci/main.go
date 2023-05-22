@@ -36,6 +36,7 @@ import (
 
 	containerutils "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils"
 	pb "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgettracermanager/api"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/host"
 )
 
 var (
@@ -102,7 +103,7 @@ func main() {
 
 	// Get bundle directory and OCI spec (config.json)
 	ppid := 0
-	if statusFile, err := os.Open(filepath.Join("/proc", fmt.Sprintf("%d", ociStatePid), "status")); err == nil {
+	if statusFile, err := os.Open(filepath.Join(host.HostRoot, "/proc", fmt.Sprintf("%d", ociStatePid), "status")); err == nil {
 		defer statusFile.Close()
 		reader := bufio.NewReader(statusFile)
 		for {
@@ -123,7 +124,7 @@ func main() {
 	} else {
 		panic(fmt.Errorf("cannot parse /proc/PID/status: %w", err))
 	}
-	cmdline, err := os.ReadFile(filepath.Join("/proc", fmt.Sprintf("%d", ppid), "cmdline"))
+	cmdline, err := os.ReadFile(filepath.Join(host.HostRoot, "/proc", fmt.Sprintf("%d", ppid), "cmdline"))
 	if err != nil {
 		panic(fmt.Errorf("cannot read /proc/PID/cmdline: %w", err))
 	}

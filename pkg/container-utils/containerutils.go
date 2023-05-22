@@ -24,6 +24,8 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/host"
+
 	ocispec "github.com/opencontainers/runtime-spec/specs-go"
 
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils/containerd"
@@ -78,7 +80,7 @@ func NewContainerRuntimeClient(runtime *RuntimeConfig) (runtimeclient.ContainerR
 }
 
 func getNamespaceInode(pid int, nsType string) (uint64, error) {
-	fileinfo, err := os.Stat(filepath.Join("/proc", fmt.Sprintf("%d", pid), "ns", nsType))
+	fileinfo, err := os.Stat(filepath.Join(host.HostRoot, "/proc", fmt.Sprintf("%d", pid), "ns", nsType))
 	if err != nil {
 		return 0, err
 	}

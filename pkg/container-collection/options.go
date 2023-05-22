@@ -24,6 +24,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/host"
+
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -703,7 +705,7 @@ func WithTracerCollection(tc TracerCollection) ContainerCollectionOption {
 		cc.cachedContainers = &sync.Map{}
 
 		cc.containerEnrichers = append(cc.containerEnrichers, func(container *Container) bool {
-			path := fmt.Sprintf("/proc/%d/ns/mnt", container.Pid)
+			path := fmt.Sprintf("%s/proc/%d/ns/mnt", host.HostRoot, container.Pid)
 			fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC, 0)
 			if err != nil {
 				log.Warnf("WithTracerCollection: failed to open mntns reference for container %s: %s",

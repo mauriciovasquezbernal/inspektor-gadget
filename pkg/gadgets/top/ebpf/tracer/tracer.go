@@ -27,6 +27,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/host"
+
 	"github.com/cilium/ebpf"
 
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/bpfstats"
@@ -161,7 +163,7 @@ func getProgIDFromFile(fn string) (uint32, error) {
 }
 
 func getPidMapFromProcFs() (map[uint32][]*types.Process, error) {
-	processes, err := os.ReadDir("/proc/")
+	processes, err := os.ReadDir(host.HostRoot + "/proc/")
 	if err != nil {
 		return nil, err
 	}
@@ -174,17 +176,17 @@ func getPidMapFromProcFs() (map[uint32][]*types.Process, error) {
 		if err != nil {
 			continue
 		}
-		fdescs, err := os.ReadDir(filepath.Join("/proc", p.Name(), "fdinfo"))
+		fdescs, err := os.ReadDir(filepath.Join(host.HostRoot, "/proc", p.Name(), "fdinfo"))
 		if err != nil {
 			continue
 		}
 		for _, fd := range fdescs {
-			if progID, err := getProgIDFromFile(filepath.Join("/proc", p.Name(), "fdinfo", fd.Name())); err == nil {
+			if progID, err := getProgIDFromFile(filepath.Join(host.HostRoot, "/proc", p.Name(), "fdinfo", fd.Name())); err == nil {
 				pid, _ := strconv.ParseUint(p.Name(), 10, 32)
 				if _, ok := pidmap[progID]; !ok {
 					pidmap[progID] = make([]*types.Process, 0, 1)
 				}
-				comm, _ := os.ReadFile(filepath.Join("/proc", p.Name(), "comm"))
+				comm, _ := os.ReadFile(filepath.Join(host.HostRoot, "/proc", p.Name(), "comm"))
 				pidmap[progID] = append(pidmap[progID], &types.Process{
 					Pid:  uint32(pid),
 					Comm: strings.TrimSpace(string(comm)),
@@ -196,7 +198,7 @@ func getPidMapFromProcFs() (map[uint32][]*types.Process, error) {
 }
 
 func getMemoryUsage(m *ebpf.Map) (uint64, error) {
-	f, err := os.Open(fmt.Sprintf("/proc/self/fdinfo/%d", m.FD()))
+	f, err := os.Open(fmt.Sprintf("%s/proc/self/fdinfo/%d", host.HostRoot, m.FD()))
 	if err != nil {
 		return 0, fmt.Errorf("could not read fdinfo: %w", err)
 	}
