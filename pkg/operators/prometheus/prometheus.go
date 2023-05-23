@@ -73,7 +73,7 @@ func (l *Prometheus) GlobalParamDescs() params.ParamDescs {
 		{
 			Key:          ParamListenAddress,
 			Title:        "Listen address",
-			DefaultValue: "127.0.0.1:2223",
+			DefaultValue: "0.0.0.0:2223",
 			Description:  "Address to serve prometheus metrics on",
 		},
 		{
