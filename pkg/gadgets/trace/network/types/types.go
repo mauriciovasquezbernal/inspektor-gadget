@@ -45,14 +45,7 @@ type Event struct {
 	PodOwner  string            `json:"podOwner,omitempty" column:"podowner,hide"`
 	PodLabels map[string]string `json:"podLabels,omitempty" column:"podlabels,hide"`
 
-	/* Remote */
-	RemoteKind eventtypes.RemoteKind `json:"remoteKind,omitempty" column:"remoteKind,maxWidth:5,hide"`
-	RemoteAddr string                `json:"remoteAddr,omitempty" column:"remoteAddr,template:ipaddr,hide"`
-
-	/* if RemoteKind = RemoteKindPod or RemoteKindService */
-	RemoteName      string            `json:"remoteName,omitempty" column:"remotename,hide"`
-	RemoteNamespace string            `json:"remoteNamespace,omitempty" column:"remotens,hide"`
-	RemoteLabels    map[string]string `json:"remoteLabels,omitempty" column:"remotelabels,hide"`
+	DstEndpoint eventtypes.Endpoint `json:"dst,omitempty" column:"dst"`
 }
 
 func (e *Event) SetLocalPodDetails(owner, hostIP, podIP string, labels map[string]string) {
@@ -62,23 +55,14 @@ func (e *Event) SetLocalPodDetails(owner, hostIP, podIP string, labels map[strin
 	e.PodLabels = labels
 }
 
-func (e *Event) GetRemoteIPs() []string {
-	return []string{e.RemoteAddr}
-}
-
-func (e *Event) SetEndpointsDetails(endpoints []eventtypes.EndpointDetails) {
-	if len(endpoints) == 0 {
-		return
-	}
-	e.RemoteName = endpoints[0].Name
-	e.RemoteNamespace = endpoints[0].Namespace
-	e.RemoteLabels = endpoints[0].PodLabels
-	e.RemoteKind = endpoints[0].Kind
+func (e *Event) GetEndpoints() []*eventtypes.Endpoint {
+	return []*eventtypes.Endpoint{&e.DstEndpoint}
 }
 
 func GetColumns() *columns.Columns[Event] {
 	cols := columns.MustCreateColumns[Event]()
 
+	// Can't use eventtypes.MustAddVirtualEndpointColumn here because we don't capture port information and don't want to display it
 	cols.MustAddColumn(columns.Attributes{
 		Name:         "remote",
 		Width:        32,
@@ -87,15 +71,15 @@ func GetColumns() *columns.Columns[Event] {
 		Order:        1000,
 		EllipsisType: ellipsis.Start,
 	}, func(e *Event) string {
-		switch e.RemoteKind {
-		case eventtypes.RemoteKindPod:
-			return fmt.Sprintf("pod %s/%s", e.RemoteNamespace, e.RemoteName)
-		case eventtypes.RemoteKindService:
-			return fmt.Sprintf("svc %s/%s", e.RemoteNamespace, e.RemoteName)
-		case eventtypes.RemoteKindOther:
-			return fmt.Sprintf("endpoint %s", e.RemoteAddr)
+		switch e.DstEndpoint.Kind {
+		case eventtypes.EndpointKindPod:
+			return fmt.Sprintf("pod %s/%s", e.DstEndpoint.Namespace, e.DstEndpoint.Name)
+		case eventtypes.EndpointKindService:
+			return fmt.Sprintf("svc %s/%s", e.DstEndpoint.Namespace, e.DstEndpoint.Name)
+		case eventtypes.EndpointKindRaw:
+			return fmt.Sprintf("endpoint %s", e.DstEndpoint.Addr)
 		default:
-			return e.RemoteAddr
+			return e.DstEndpoint.Addr
 		}
 	})
 

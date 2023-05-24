@@ -159,12 +159,16 @@ func (t *Tracer) run() {
 			Gid:           bpfEvent.ProcSocket.Gid,
 			Comm:          gadgets.FromCString(bpfEvent.ProcSocket.Task[:]),
 			IPVersion:     ipversion,
-			Saddr:         gadgets.IPStringFromBytes(bpfEvent.Saddr, ipversion),
-			Daddr:         gadgets.IPStringFromBytes(bpfEvent.Daddr, ipversion),
-			Dport:         gadgets.Htons(bpfEvent.Dport),
-			Sport:         gadgets.Htons(bpfEvent.Sport),
-			State:         tcpbits.TCPState(bpfEvent.State),
-			Tcpflags:      tcpbits.TCPFlags(bpfEvent.Tcpflags),
+			SrcEndpoint: eventtypes.Endpoint{
+				Addr: gadgets.IPStringFromBytes(bpfEvent.Saddr, ipversion),
+				Port: gadgets.Htons(bpfEvent.Sport),
+			},
+			DstEndpoint: eventtypes.Endpoint{
+				Addr: gadgets.IPStringFromBytes(bpfEvent.Daddr, ipversion),
+				Port: gadgets.Htons(bpfEvent.Dport),
+			},
+			State:    tcpbits.TCPState(bpfEvent.State),
+			Tcpflags: tcpbits.TCPFlags(bpfEvent.Tcpflags),
 		}
 
 		t.eventCallback(&event)
