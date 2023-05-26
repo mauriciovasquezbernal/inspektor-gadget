@@ -698,8 +698,43 @@ func WithTracerCollection(tc TracerCollection) ContainerCollectionOption {
 		cc.cacheDelay = 2 * time.Second
 		cc.cachedContainers = &sync.Map{}
 
-		// container.cleanUpFuncs is called either at cc.RemoveContainer() or at cc.Close()
-		var cleanupMu sync.Mutex
+		// This functions cleans up the container cache
+		go func() {
+
+			ticker := time.NewTicker(5 * time.Second)
+
+			for {
+
+				select {
+				case <-ticker.C:
+					cc.mu.Lock()
+
+					if cc.closed {
+						return
+					}
+
+					now := time.Now()
+
+					cc.cachedContainers.Range(func(key, value interface{}) bool {
+						c := value.(*Container)
+
+						if now.Sub(c.deletionTimestamp) > cc.cacheDelay {
+							if c.mntNsFd != 0 {
+								unix.Close(c.mntNsFd)
+								c.mntNsFd = 0
+							}
+							cc.containers.Delete(c)
+						}
+
+						return true
+					})
+
+					cc.mu.Unlock()
+				case <-cc.done:
+					return
+				}
+			}
+		}()
 
 		cc.containerEnrichers = append(cc.containerEnrichers, func(container *Container) bool {
 			path := fmt.Sprintf("/proc/%d/ns/mnt", container.Pid)
@@ -711,25 +746,15 @@ func WithTracerCollection(tc TracerCollection) ContainerCollectionOption {
 			}
 
 			container.mntNsFd = fd
-
-			container.cleanUpFuncs = append(container.cleanUpFuncs, func() {
-				cleanupMu.Lock()
-				defer cleanupMu.Unlock()
-
-				if container.mntNsFd == -1 {
-					return
-				}
-				unix.Close(container.mntNsFd)
-				container.mntNsFd = -1
-			})
 			return true
 		})
 
 		cc.cleanUpFuncs = append(cc.cleanUpFuncs, func() {
 			cc.cachedContainers.Range(func(key, value interface{}) bool {
 				c := value.(*Container)
-				for _, f := range c.cleanUpFuncs {
-					f()
+				if c.mntNsFd != 0 {
+					unix.Close(c.mntNsFd)
+					c.mntNsFd = 0
 				}
 				cc.cachedContainers.Delete(key)
 				return true
