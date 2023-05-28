@@ -33,7 +33,6 @@ import (
 	pb "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgettracermanager/api"
 	containersmap "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgettracermanager/containers-map"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/runcfanotify"
 	tracercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/tracer-collection"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
@@ -269,22 +268,16 @@ func NewServer(conf *Conf) (*GadgetTracerManager, error) {
 			opts = append(opts, containercollection.WithInitialKubernetesContainers(g.nodeName))
 		}
 	case "auto":
-		if runcfanotify.Supported() {
-			log.Infof("GadgetTracerManager: hook mode: fanotify (auto)")
-			opts = append(opts, containercollection.WithRuncFanotify())
-			opts = append(opts, containercollection.WithInitialKubernetesContainers(g.nodeName))
-		} else {
-			log.Infof("GadgetTracerManager: hook mode: podinformer (auto)")
-			opts = append(opts, containercollection.WithPodInformer(g.nodeName))
-			podInformerUsed = true
-		}
+		log.Infof("GadgetTracerManager: hook mode: fanotify (auto)")
+		opts = append(opts, containercollection.WithContainerFanotify())
+		opts = append(opts, containercollection.WithInitialKubernetesContainers(g.nodeName))
 	case "podinformer":
 		log.Infof("GadgetTracerManager: hook mode: podinformer")
 		opts = append(opts, containercollection.WithPodInformer(g.nodeName))
 		podInformerUsed = true
 	case "fanotify":
 		log.Infof("GadgetTracerManager: hook mode: fanotify")
-		opts = append(opts, containercollection.WithRuncFanotify())
+		opts = append(opts, containercollection.WithContainerFanotify())
 		opts = append(opts, containercollection.WithInitialKubernetesContainers(g.nodeName))
 	default:
 		return nil, fmt.Errorf("invalid hook mode: %s", conf.HookMode)

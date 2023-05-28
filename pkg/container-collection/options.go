@@ -34,6 +34,7 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
 
+	containerhook "github.com/inspektor-gadget/inspektor-gadget/pkg/container-hook"
 	containerutils "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils/cgroups"
 	ociannotations "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils/oci-annotations"
@@ -569,6 +570,47 @@ func WithRuncFanotify() ContainerCollectionOption {
 			err := runcNotifier.AddWatchContainerTermination(container.ID, int(container.Pid))
 			if err != nil {
 				log.Errorf("runc fanotify enricher: failed to watch container %s: %s", container.ID, err)
+				return false
+			}
+			return true
+		})
+		return nil
+	}
+}
+
+// WithContainerFanotify uses fanotify to detect when containers are created and add
+// them in the ContainerCollection.
+//
+// ContainerCollection.Initialize(WithContainerFanotify())
+func WithContainerFanotify() ContainerCollectionOption {
+	return func(cc *ContainerCollection) error {
+		containerNotifier, err := containerhook.NewContainerNotifier(func(notif containerhook.ContainerEvent) {
+			switch notif.Type {
+			case containerhook.EventTypeAddContainer:
+				container := &Container{
+					ID:        notif.ContainerID,
+					Pid:       notif.ContainerPID,
+					OciConfig: notif.ContainerConfig,
+					Name:      notif.ContainerName,
+				}
+				cc.AddContainer(container)
+			case containerhook.EventTypeRemoveContainer:
+				cc.RemoveContainer(notif.ContainerID)
+			}
+		})
+		if err != nil {
+			return fmt.Errorf("starting container fanotify: %w", err)
+		}
+
+		cc.cleanUpFuncs = append(cc.cleanUpFuncs, func() {
+			containerNotifier.Close()
+		})
+
+		// Future containers
+		cc.containerEnrichers = append(cc.containerEnrichers, func(container *Container) bool {
+			err := containerNotifier.AddWatchContainerTermination(container.ID, int(container.Pid))
+			if err != nil {
+				log.Errorf("container fanotify enricher: failed to watch container %s: %s", container.ID, err)
 				return false
 			}
 			return true

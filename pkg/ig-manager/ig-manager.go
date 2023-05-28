@@ -96,7 +96,7 @@ func NewManager(runtimes []*containerutils.RuntimeConfig) (*IGManager, error) {
 		containercollection.WithCgroupEnrichment(),
 		containercollection.WithLinuxNamespaceEnrichment(),
 		containercollection.WithMultipleContainerRuntimesEnrichment(runtimes),
-		containercollection.WithRuncFanotify(),
+		containercollection.WithContainerFanotify(),
 		containercollection.WithTracerCollection(l.tracerCollection),
 	}
 
