@@ -70,6 +70,10 @@ type ContainerCollection struct {
 
 	// functions to be called on Close()
 	cleanUpFuncs []func()
+
+	// containerRuntimeWarnings tells if we should print warnings about failed container
+	// runtimes initializations.-
+	containerRuntimeWarnings bool
 }
 
 // ContainerCollectionOption are options to pass to

@@ -39,7 +39,7 @@ func NewListContainersCmd() *cobra.Command {
 		Use:   "list-containers",
 		Short: "List all containers",
 		RunE: func(*cobra.Command, []string) error {
-			igmanager, err := igmanager.NewManager(commonFlags.RuntimeConfigs)
+			igmanager, err := igmanager.NewManager(commonFlags.RuntimeConfigs, !commonFlags.IsRuntimesDefault)
 			if err != nil {
 				return commonutils.WrapInErrManagerInit(err)
 			}

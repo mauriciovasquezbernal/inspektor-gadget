@@ -38,7 +38,8 @@ type CommonFlags struct {
 	Containername string
 
 	// The name of the container runtimes to be used separated by comma.
-	Runtimes string
+	Runtimes          string
+	IsRuntimesDefault bool
 
 	// RuntimeConfigs contains the list of the container runtimes to be used
 	// with their specific socket path.
@@ -85,6 +86,8 @@ func AddCommonFlags(command *cobra.Command, commonFlags *CommonFlags) {
 				SocketPath: socketPath,
 			})
 		}
+
+		commonFlags.IsRuntimesDefault = strings.Join(containerutils.AvailableRuntimes, ", ") == commonFlags.Runtimes
 
 		// Output Mode
 		if err := commonFlags.ParseOutputConfig(); err != nil {

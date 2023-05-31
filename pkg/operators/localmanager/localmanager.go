@@ -146,7 +146,11 @@ func (l *LocalManager) CanOperateOn(gadget gadgets.GadgetDesc) bool {
 
 func (l *LocalManager) Init(operatorParams *params.Params) error {
 	rc := make([]*containerutils.RuntimeConfig, 0)
-	parts := operatorParams.Get(Runtimes).AsStringSlice()
+	runtimesParam := operatorParams.Get(Runtimes)
+
+	parts := runtimesParam.AsStringSlice()
+	// Only print warnings if the default value was overridden
+	warns := runtimesParam.String() != runtimesParam.DefaultValue
 
 partsLoop:
 	for _, p := range parts {
@@ -183,7 +187,7 @@ partsLoop:
 
 	l.rc = rc
 
-	igManager, err := igmanager.NewManager(l.rc)
+	igManager, err := igmanager.NewManager(l.rc, warns)
 	if err != nil {
 		return commonutils.WrapInErrManagerInit(err)
 	}

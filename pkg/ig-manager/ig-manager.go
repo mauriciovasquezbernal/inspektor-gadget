@@ -70,7 +70,7 @@ func (l *IGManager) RemoveMountNsMap(id string) error {
 	return l.tracerCollection.RemoveTracer(id)
 }
 
-func NewManager(runtimes []*containerutils.RuntimeConfig) (*IGManager, error) {
+func NewManager(runtimes []*containerutils.RuntimeConfig, withWarns bool) (*IGManager, error) {
 	l := &IGManager{}
 
 	var err error
@@ -88,7 +88,7 @@ func NewManager(runtimes []*containerutils.RuntimeConfig) (*IGManager, error) {
 		return nil, fmt.Errorf("creating containers map: %w", err)
 	}
 
-	err = l.ContainerCollection.Initialize(
+	opts := []containercollection.ContainerCollectionOption{
 		containercollection.WithPubSub(l.containersMap.ContainersMapUpdater()),
 		containercollection.WithOCIConfigEnrichment(),
 		containercollection.WithCgroupEnrichment(),
@@ -96,7 +96,14 @@ func NewManager(runtimes []*containerutils.RuntimeConfig) (*IGManager, error) {
 		containercollection.WithMultipleContainerRuntimesEnrichment(runtimes),
 		containercollection.WithRuncFanotify(),
 		containercollection.WithTracerCollection(l.tracerCollection),
-	)
+	}
+
+	if withWarns {
+		warnings := []containercollection.ContainerCollectionOption{containercollection.WithContainerRuntimeWarnings()}
+		opts = append(warnings, opts...)
+	}
+
+	err = l.ContainerCollection.Initialize(opts...)
 	if err != nil {
 		return nil, err
 	}
