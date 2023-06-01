@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	runtimeclient "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils/runtime-client"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
 
 const (
@@ -130,10 +131,14 @@ func (c *ContainerdClient) GetContainer(containerID string) (*runtimeclient.Cont
 	// 2. We would need to get the Task for the Container. containerd needs to aquire a mutex
 	//    that is currently hold by the creating process, which we interrupted -> deadlock
 	containerData := &runtimeclient.ContainerData{
-		ID:      container.ID(),
-		Name:    getContainerName(container, labels),
-		State:   runtimeclient.StateCreated,
-		Runtime: runtimeclient.ContainerdName,
+		Runtime: runtimeclient.RuntimeContainerData{
+			BasicRuntimeMetadata: types.BasicRuntimeMetadata{
+				ContainerID:   container.ID(),
+				ContainerName: getContainerName(container, labels),
+				RuntimeName:   types.RuntimeNameContainerd,
+			},
+			State: runtimeclient.StateCreated,
+		},
 	}
 	runtimeclient.EnrichWithK8sMetadata(containerData, labels)
 	return containerData, nil
@@ -256,12 +261,15 @@ func (c *ContainerdClient) taskAndContainerToContainerData(task *containerTask, 
 	if err != nil {
 		return nil, fmt.Errorf("listing labels of container %q: %w", container.ID(), err)
 	}
-
 	containerData := &runtimeclient.ContainerData{
-		ID:      container.ID(),
-		Name:    getContainerName(container, labels),
-		State:   task.status,
-		Runtime: runtimeclient.ContainerdName,
+		Runtime: runtimeclient.RuntimeContainerData{
+			BasicRuntimeMetadata: types.BasicRuntimeMetadata{
+				ContainerID:   container.ID(),
+				ContainerName: getContainerName(container, labels),
+				RuntimeName:   types.RuntimeNameContainerd,
+			},
+			State: task.status,
+		},
 	}
 	runtimeclient.EnrichWithK8sMetadata(containerData, labels)
 	return containerData, nil
