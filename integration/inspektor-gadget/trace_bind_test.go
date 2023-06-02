@@ -35,7 +35,7 @@ func TestTraceBind(t *testing.T) {
 		ExpectedOutputFn: func(output string) error {
 			expectedEntry := &tracebindTypes.Event{
 				Event:     BuildBaseEvent(ns),
-				Comm:      "nc",
+				Comm:      "ncaaa",
 				Protocol:  "TCP",
 				Addr:      "::",
 				Port:      9090,
@@ -50,7 +50,8 @@ func TestTraceBind(t *testing.T) {
 				e.MountNsID = 0
 			}
 
-			return ExpectAllToMatch(output, normalize, expectedEntry)
+			ExpectAllToMatch(t, output, normalize, expectedEntry)
+			return nil
 		},
 	}
 

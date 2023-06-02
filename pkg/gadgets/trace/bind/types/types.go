@@ -30,6 +30,8 @@ type Event struct {
 	Port      uint16 `json:"port,omitempty" column:"port,template:ipport"`
 	Options   string `json:"opts,omitempty" column:"opts,width:5,fixed"`
 	Interface string `json:"if,omitempty" column:"if,width:12"`
+
+	fooo string
 }
 
 func GetColumns() *columns.Columns[Event] {
