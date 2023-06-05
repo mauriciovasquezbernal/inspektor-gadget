@@ -56,8 +56,8 @@ func TestTraceNetwork(t *testing.T) {
 						},
 					},
 					Comm:       "nginx",
-					Uid:        101, // default nginx user
-					Gid:        101,
+					Uid:        0, // different nginx cmdline seems to cause different uid
+					Gid:        0,
 					PktType:    "HOST",
 					Proto:      "tcp",
 					Port:       80,
