@@ -15,6 +15,7 @@
 package gadgets
 
 import (
+	"github.com/inspektor-gadget/inspektor-gadget/cmd/common/frontends"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/parser"
 )
@@ -102,6 +103,15 @@ func (of OutputFormats) Append(other OutputFormats) {
 // an entry in the supportedFormats map
 type GadgetOutputFormats interface {
 	OutputFormats() (supportedFormats OutputFormats, defaultFormatKey string)
+}
+
+// TODO: perhaps it's better to receive a gadget context that has all the parameters filled in?
+type GadgetDescCustomParser interface {
+	CustomParser(*params.Params) parser.Parser
+}
+
+type GadgetDescCustomJson interface {
+	JsonConverter(params *params.Params, fe frontends.Frontend) func(ev any)
 }
 
 type EventHandlerSetter interface {

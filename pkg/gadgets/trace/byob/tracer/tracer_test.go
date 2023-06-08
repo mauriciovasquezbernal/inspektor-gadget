@@ -106,7 +106,7 @@ func TestByobTracerTcpconnect(t *testing.T) {
 						WithMountNsID: eventtypes.WithMountNsID{
 							MountNsID: 0,
 						},
-						Payload: `{"daddr":"127.0.0.1","saddr":"127.0.0.1"}`,
+						//Payload: `{"daddr":"127.0.0.1","saddr":"127.0.0.1"}`,
 					}
 				})(t, runners[1].Info, "none", events)
 			},

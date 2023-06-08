@@ -22,8 +22,10 @@ import (
 type Event struct {
 	eventtypes.Event
 	eventtypes.WithMountNsID
-
-	Payload string `json:"payload,omitempty" column:"payload,minWidth:24,width:128"`
+	// Raw event sent by the ebpf program
+	RawData []byte `json:"raw_data"`
+	// How to flatten this?
+	Data map[string]interface{} `json:"data"`
 }
 
 func GetColumns() *columns.Columns[Event] {
@@ -34,4 +36,10 @@ func Base(ev eventtypes.Event) *Event {
 	return &Event{
 		Event: ev,
 	}
+}
+
+type GadgetDefinition struct {
+	Name         string               `yaml:"name"`
+	Description  string               `yaml:"description"`
+	ColumnsAttrs []columns.Attributes `yaml:"columns"`
 }

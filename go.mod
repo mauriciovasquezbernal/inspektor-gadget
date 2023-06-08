@@ -163,7 +163,7 @@ require (
 )
 
 // Upstream PR: https://github.com/solo-io/bumblebee/pull/103
-replace github.com/solo-io/bumblebee => github.com/burak-ok/bumblebee v0.0.0-20230504091707-e6577735adb5
+replace github.com/solo-io/bumblebee => github.com/inspektor-gadget/bumblebee v0.0.0-20230609181453-90f1d631d316
 
 replace github.com/cilium/ebpf => github.com/cilium/ebpf v0.0.0-20230406090554-73acad5e3906
 

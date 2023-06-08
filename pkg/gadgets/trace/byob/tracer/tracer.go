@@ -19,7 +19,7 @@ package tracer
 import (
 	"bytes"
 	"context"
-	"encoding/json"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -43,6 +43,7 @@ import (
 
 const (
 	BPFSocketAttach = 50
+	MntNsIdType     = "mnt_ns_id_t"
 )
 
 type Config struct {
@@ -81,31 +82,13 @@ func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 }
 
 func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
-	params := gadgetCtx.GadgetParams()
-	t.config.ProgLocation = params.Get(ParamOCIImage).AsString()
-
-	if len(t.config.ProgLocation) != 0 {
-		// Download the BPF module
-		byobEbpfPackage, err := t.getByobEbpfPackage()
-		if err != nil {
-			return fmt.Errorf("failed to download byob ebpf package: %w", err)
-		}
-		t.config.ProgContent = byobEbpfPackage.ProgramFileBytes
-	} else if len(params.Get(ProgramContent).AsBytes()) != 0 {
-		t.config.ProgContent = params.Get(ProgramContent).AsBytes()
-	} else {
-		return fmt.Errorf("%q or %q not set", ParamOCIImage, ProgramContent)
-	}
-
-	if err := t.installTracer(); err != nil {
-		return fmt.Errorf("installing tracer: %w", err)
-	}
-
 	return nil
 }
 
 func (t *Tracer) Close() {
-	t.collection.Close()
+	if t.collection != nil {
+		t.collection.Close()
+	}
 }
 
 func (t *Tracer) getByobEbpfPackage() (*beespec.EbpfPackage, error) {
@@ -158,11 +141,12 @@ func (t *Tracer) installTracer() error {
 	}
 
 	mapReplacements := map[string]*ebpf.Map{}
+	consts := map[string]interface{}{}
 
 	// Find the print map
 	for mapName, m := range t.spec.Maps {
 		// TODO: Print maps only with prefix print_ ?
-		if (m.Type == ebpf.RingBuf || m.Type == ebpf.PerfEventArray) && strings.HasPrefix(m.Name, "print_") {
+		if (m.Type == ebpf.RingBuf || m.Type == ebpf.PerfEventArray) && strings.HasPrefix(m.Name, PrintMapPrefix) {
 			if t.printMap != "" {
 				return fmt.Errorf("multiple print maps: %q and %q", t.printMap, mapName)
 			}
@@ -183,9 +167,19 @@ func (t *Tracer) installTracer() error {
 				t.spec.Maps[mapName].ValueSize = 4
 			}
 		}
+
+		if m.Type == ebpf.Hash && m.Name == "gadget_mntns_filter_map" {
+			mapReplacements["gadget_mntns_filter_map"] = t.config.MountnsMap
+			consts["gadget_filter_by_mntns"] = true
+		}
+
 	}
 	if t.printMap == "" {
-		return fmt.Errorf("no BPF map with 'print_' prefix found")
+		return fmt.Errorf("no BPF map with %q prefix found", PrintMapPrefix)
+	}
+
+	if err := t.spec.RewriteConstants(consts); err != nil {
+		return fmt.Errorf("rewriting constants: %w", err)
 	}
 
 	// Load the ebpf objects
@@ -232,15 +226,63 @@ func (t *Tracer) installTracer() error {
 				return fmt.Errorf("failed to attach BPF program %q: %w", progName, err)
 			}
 			t.links = append(t.links, l)
+		} else if p.Type == ebpf.TracePoint && strings.HasPrefix(p.SectionName, "tracepoint/") {
+			parts := strings.Split(p.AttachTo, "/")
+			l, err := link.Tracepoint(parts[0], parts[1], t.collection.Programs[progName], nil)
+			if err != nil {
+				return fmt.Errorf("failed to attach BPF program %q: %w", progName, err)
+			}
+			t.links = append(t.links, l)
 		}
 	}
 
 	return nil
 }
 
+func getUnderlyingType(tf *btf.Typedef) (btf.Type, error) {
+	switch typedMember := tf.Type.(type) {
+	case *btf.Typedef:
+		return getUnderlyingType(typedMember)
+	default:
+		return typedMember, nil
+	}
+}
+
 func (t *Tracer) run() {
-	d := t.decoderFactory()
-	ctx := context.TODO()
+	typ := t.valueStruct
+
+	var start, end uint32
+
+	// we suppose the same data is always sent, so we can precalculate the offsets for the mount
+	// ns id
+	for _, member := range typ.Members {
+		if member.Type.TypeName() != MntNsIdType {
+			continue
+		}
+
+		typDef, ok := member.Type.(*btf.Typedef)
+		if !ok {
+			continue
+		}
+
+		underlying, err := getUnderlyingType(typDef)
+		if err != nil {
+			continue
+		}
+
+		intM, ok := underlying.(*btf.Int)
+		if !ok {
+			continue
+		}
+
+		if intM.Size != 8 {
+			continue
+		}
+
+		start = member.Offset.Bytes()
+		end = start + intM.Size
+	}
+
 	for {
 		var rawSample []byte
 
@@ -281,6 +323,7 @@ func (t *Tracer) run() {
 			return
 		}
 
+		// TODO: this check is not valid for all cases. For instance trace exec sends a variable length
 		if uint32(len(rawSample)) < t.mapSizes[t.printMap] {
 			msg := fmt.Sprintf("Error reading ring buffer: len(RawSample)=%d!=%d",
 				len(rawSample),
@@ -289,44 +332,57 @@ func (t *Tracer) run() {
 			return
 		}
 
-		// FIXME: DecodeBtfBinary has a bug with non-NULL-terminated strings.
-		// For now, ensure the problem does not happen in ebpf
+		//fmt.Printf("map size is: %d\n", t.mapSizes[t.printMap])
 
-		result, err := d.DecodeBtfBinary(ctx, t.valueStruct, rawSample[:t.mapSizes[t.printMap]])
-		if err != nil {
-			msg := fmt.Sprintf("Error decoding btf: %s", err)
-			t.eventCallback(types.Base(eventtypes.Err(msg)))
-			return
-		}
-		b, err := json.Marshal(result)
-		if err != nil {
-			msg := fmt.Sprintf("Error encoding json: %s", err)
-			t.eventCallback(types.Base(eventtypes.Err(msg)))
-			return
+		// data will be decoded in the client
+		data := rawSample[:t.mapSizes[t.printMap]]
+
+		//data := rawSample
+
+		// get mnt_ns_id for enriching the event
+		mtn_ns_id := uint64(0)
+		if end != 0 {
+			buf := bytes.NewBuffer(data[start:end])
+			if err := binary.Read(buf, binary.LittleEndian, &mtn_ns_id); err != nil {
+				continue
+			}
 		}
 
 		event := types.Event{
 			Event: eventtypes.Event{
 				Type: eventtypes.NORMAL,
 			},
-			WithMountNsID: eventtypes.WithMountNsID{MountNsID: 0},
-			Payload:       fmt.Sprintf("%+v", string(b)),
+			WithMountNsID: eventtypes.WithMountNsID{MountNsID: mtn_ns_id},
+			RawData:       data,
 		}
-		var mountNsIDStruct struct {
-			MountNsID uint64 `json:"mount_ns_id"`
-		}
-		_ = json.Unmarshal(b, &mountNsIDStruct)
-		event.MountNsID = mountNsIDStruct.MountNsID
 
-		if t.enricher != nil {
-			t.enricher.EnrichByMntNs(&event.CommonData, event.MountNsID)
-		}
+		//fmt.Printf("event: %+v\n", event)
 
 		t.eventCallback(&event)
 	}
 }
 
 func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
+	params := gadgetCtx.GadgetParams()
+	t.config.ProgLocation = params.Get(ParamOCIImage).AsString()
+
+	if len(t.config.ProgLocation) != 0 {
+		// Download the BPF module
+		byobEbpfPackage, err := t.getByobEbpfPackage()
+		if err != nil {
+			return fmt.Errorf("failed to download byob ebpf package: %w", err)
+		}
+		t.config.ProgContent = byobEbpfPackage.ProgramFileBytes
+	} else if len(params.Get(ProgramContent).AsBytes()) != 0 {
+		t.config.ProgContent = params.Get(ProgramContent).AsBytes()
+	} else {
+		return fmt.Errorf("%q or %q not set", ParamOCIImage, ProgramContent)
+	}
+
+	if err := t.installTracer(); err != nil {
+		return fmt.Errorf("installing tracer: %w", err)
+	}
+
 	go t.run()
 	gadgetcontext.WaitForTimeoutOrDone(gadgetCtx)
 

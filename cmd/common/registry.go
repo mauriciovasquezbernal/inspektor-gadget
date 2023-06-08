@@ -207,6 +207,12 @@ func buildCommandFromGadget(
 				timeoutDuration = time.Duration(timeout) * time.Second
 			}
 
+			if c, ok := gadgetDesc.(gadgets.GadgetDescCustomParser); ok {
+				parser = c.CustomParser(gadgetParams)
+				// TODO: this should not be repeated here...
+				parser.SetColumnFilters(columnFilters...)
+			}
+
 			gadgetCtx := gadgetcontext.New(
 				ctx,
 				"",
@@ -402,7 +408,11 @@ func buildCommandFromGadget(
 				fe.Output(formatter.FormatHeader())
 				parser.SetEventCallback(formatter.EventHandlerFuncArray())
 			case OutputModeJSON:
-				parser.SetEventCallback(printEventAsJSONFn(fe))
+				jsonCallback := printEventAsJSONFn(fe)
+				if cjson, ok := gadgetDesc.(gadgets.GadgetDescCustomJson); ok {
+					jsonCallback = cjson.JsonConverter(gadgetParams, fe)
+				}
+				parser.SetEventCallback(jsonCallback)
 			case OutputModeJSONPretty:
 				parser.SetEventCallback(printEventAsJSONPrettyFn(fe))
 			case OutputModeYAML:
