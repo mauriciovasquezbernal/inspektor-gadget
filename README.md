@@ -1,3 +1,5 @@
+foo
+
 <h1 align="center">
   <picture>
     <source media="(prefers-color-scheme: light)" srcset="docs/images/logo/logo-horizontal.png">
