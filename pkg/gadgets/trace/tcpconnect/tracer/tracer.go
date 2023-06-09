@@ -140,7 +140,7 @@ func (t *Tracer) install() error {
 		}
 	}
 
-	reader, err := perf.NewReader(t.objs.tcpconnectMaps.Events, gadgets.PerfBufferPages*os.Getpagesize())
+	reader, err := perf.NewReader(t.objs.tcpconnectMaps.PrintEvents, gadgets.PerfBufferPages*os.Getpagesize())
 	if err != nil {
 		return fmt.Errorf("creating perf ring buffer: %w", err)
 	}

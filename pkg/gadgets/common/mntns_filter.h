@@ -7,6 +7,9 @@
 #include <bpf/bpf_core_read.h>
 #include <bpf/bpf_tracing.h>
 
+// Inode id of a mount namespace. It's used to enrich the event in user space
+typedef u64 mnt_ns_id_t;
+
 const volatile bool gadget_filter_by_mntns = false;
 
 struct {
@@ -23,7 +26,7 @@ static __always_inline bool gadget_should_discard_mntns_id(__u64 mntns_id) {
 }
 
 // gadget_get_mntns_id returns the mntns_id of the current task.
-static __always_inline __u64 gadget_get_mntns_id() {
+static __always_inline mnt_ns_id_t gadget_get_mntns_id() {
 	struct task_struct *task;
 	__u64 mntns_id;
 

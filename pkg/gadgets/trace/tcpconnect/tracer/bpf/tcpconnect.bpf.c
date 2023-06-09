@@ -10,7 +10,6 @@
 
 #include "maps.bpf.h"
 #include "tcpconnect.h"
-#include "mntns_filter.h"
 
 const volatile int filter_ports[MAX_PORTS];
 const volatile int filter_ports_len = 0;
@@ -72,8 +71,8 @@ struct {
 struct {
 	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
 	__uint(key_size, sizeof(u32));
-	__uint(value_size, sizeof(u32));
-} events SEC(".maps");
+	__type(value, struct event);
+} print_events SEC(".maps");
 
 static __always_inline bool filter_port(__u16 port)
 {
@@ -178,7 +177,7 @@ trace_v4(struct pt_regs *ctx, pid_t pid, struct sock *sk, __u16 dport, __u64 mnt
 	bpf_get_current_comm(event.task, sizeof(event.task));
 	event.timestamp = bpf_ktime_get_boot_ns();
 
-	bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU,
+	bpf_perf_event_output(ctx, &print_events, BPF_F_CURRENT_CPU,
 			      &event, sizeof(event));
 }
 
@@ -203,7 +202,7 @@ trace_v6(struct pt_regs *ctx, pid_t pid, struct sock *sk, __u16 dport, __u64 mnt
 	bpf_get_current_comm(event.task, sizeof(event.task));
 	event.timestamp = bpf_ktime_get_boot_ns();
 
-	bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU,
+	bpf_perf_event_output(ctx, &print_events, BPF_F_CURRENT_CPU,
 			      &event, sizeof(event));
 }
 
@@ -293,7 +292,7 @@ static __always_inline int handle_tcp_rcv_state_process(void *ctx, struct sock *
 				__sk_common.skc_v6_daddr.in6_u.u6_addr32);
 	}
 	event.timestamp = bpf_ktime_get_boot_ns();
-	bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU,
+	bpf_perf_event_output(ctx, &print_events, BPF_F_CURRENT_CPU,
 			&event, sizeof(event));
 
 cleanup:

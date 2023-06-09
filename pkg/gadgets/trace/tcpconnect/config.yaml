@@ -1,0 +1,35 @@
+name: tcpconnect
+description: trace tcp connections
+columns:
+  - name: saddr
+    template: ipaddr
+    order: 1000
+    visible: true
+  - name: daddr
+    template: ipaddr
+    order: 1001
+    visible: true
+  - name: dport
+    template: ipport
+    order: 1002
+    visible: true
+  - name: sport
+    template: ipport
+    order: 1003
+    visible: true
+  - name: uid
+    template: uid
+    order: 1004
+    visible: true
+  - name: gid
+    template: gid
+    order: 1005
+    visible: true
+  - name: pid
+    template: pid
+    order: 1006
+    visible: true
+  - name: task
+    template: comm
+    order: 1006
+    visible: true

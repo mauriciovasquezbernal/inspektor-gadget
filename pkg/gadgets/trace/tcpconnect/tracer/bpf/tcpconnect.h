@@ -3,6 +3,8 @@
 #ifndef __TCPCONNECT_H
 #define __TCPCONNECT_H
 
+#include "mntns_filter.h"
+
 /* The maximum number of items in maps */
 #define MAX_ENTRIES 8192
 
@@ -40,7 +42,7 @@ struct event {
 	__u32 gid;
 	__u16 dport;
 	__u16 sport;
-	__u64 mntns_id;
+	mnt_ns_id_t mntns_id;
 	__u64 latency;
 };
 

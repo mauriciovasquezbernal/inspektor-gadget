@@ -2,6 +2,8 @@
 #ifndef __OPENSNOOP_H
 #define __OPENSNOOP_H
 
+#include "mntns_filter.h"
+
 #define TASK_COMM_LEN 16
 #define NAME_MAX 255
 #define INVALID_UID ((uid_t)-1)
@@ -17,7 +19,7 @@ struct event {
 	__u32 pid;
 	__u32 uid;
 	__u32 gid;
-	__u64 mntns_id;
+	mnt_ns_id_t mntns_id;
 	int ret;
 	int flags;
 	__u8 comm[TASK_COMM_LEN];

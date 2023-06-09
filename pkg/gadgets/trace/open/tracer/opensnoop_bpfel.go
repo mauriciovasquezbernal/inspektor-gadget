@@ -77,8 +77,8 @@ type opensnoopProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type opensnoopMapSpecs struct {
-	Events               *ebpf.MapSpec `ebpf:"events"`
 	GadgetMntnsFilterMap *ebpf.MapSpec `ebpf:"gadget_mntns_filter_map"`
+	PrintEvents          *ebpf.MapSpec `ebpf:"print_events"`
 	Start                *ebpf.MapSpec `ebpf:"start"`
 }
 
@@ -101,15 +101,15 @@ func (o *opensnoopObjects) Close() error {
 //
 // It can be passed to loadOpensnoopObjects or ebpf.CollectionSpec.LoadAndAssign.
 type opensnoopMaps struct {
-	Events               *ebpf.Map `ebpf:"events"`
 	GadgetMntnsFilterMap *ebpf.Map `ebpf:"gadget_mntns_filter_map"`
+	PrintEvents          *ebpf.Map `ebpf:"print_events"`
 	Start                *ebpf.Map `ebpf:"start"`
 }
 
 func (m *opensnoopMaps) Close() error {
 	return _OpensnoopClose(
-		m.Events,
 		m.GadgetMntnsFilterMap,
+		m.PrintEvents,
 		m.Start,
 	)
 }

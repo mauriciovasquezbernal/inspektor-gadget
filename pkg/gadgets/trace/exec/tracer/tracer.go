@@ -105,7 +105,7 @@ func (t *Tracer) install() error {
 		return fmt.Errorf("attaching exit tracepoint: %w", err)
 	}
 
-	reader, err := perf.NewReader(t.objs.execsnoopMaps.Events, gadgets.PerfBufferPages*os.Getpagesize())
+	reader, err := perf.NewReader(t.objs.execsnoopMaps.PrintEvents, gadgets.PerfBufferPages*os.Getpagesize())
 	if err != nil {
 		return fmt.Errorf("creating perf ring buffer: %w", err)
 	}
@@ -133,6 +133,9 @@ func (t *Tracer) run() {
 			t.eventCallback(types.Base(eventtypes.Warn(msg)))
 			continue
 		}
+
+		rawSample := record.RawSample
+		fmt.Printf("len is %d\n", len(rawSample))
 
 		bpfEvent := (*execsnoopEvent)(unsafe.Pointer(&record.RawSample[0]))
 

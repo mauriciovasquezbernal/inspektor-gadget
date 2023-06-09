@@ -129,7 +129,7 @@ func (t *Tracer) install() error {
 	}
 	t.openAtExitLink = openAtExit
 
-	reader, err := perf.NewReader(t.objs.opensnoopMaps.Events, gadgets.PerfBufferPages*os.Getpagesize())
+	reader, err := perf.NewReader(t.objs.opensnoopMaps.PrintEvents, gadgets.PerfBufferPages*os.Getpagesize())
 	if err != nil {
 		return fmt.Errorf("creating perf ring buffer: %w", err)
 	}

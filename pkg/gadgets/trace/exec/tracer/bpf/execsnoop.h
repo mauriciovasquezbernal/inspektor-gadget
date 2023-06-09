@@ -12,8 +12,10 @@
 #define EVENT_SIZE(e) (BASE_EVENT_SIZE + e->args_size)
 #define LAST_ARG (FULL_MAX_ARGS_ARR - ARGSIZE)
 
+#include "mntns_filter.h"
+
 struct event {
-	__u64 mntns_id;
+	mnt_ns_id_t mntns_id;
 	__u64 timestamp;
 	__u32 pid;
 	__u32 ppid;

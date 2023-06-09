@@ -6,7 +6,6 @@
 #include <bpf/bpf_tracing.h>
 #endif /* __TARGET_ARCH_arm64 */
 #include "execsnoop.h"
-#include "mntns_filter.h"
 
 const volatile bool ignore_failed = true;
 const volatile uid_t targ_uid = INVALID_UID;
@@ -24,8 +23,9 @@ struct {
 struct {
 	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
 	__uint(key_size, sizeof(u32));
-	__uint(value_size, sizeof(u32));
-} events SEC(".maps");
+	//__uint(value_size, sizeof(u32));
+	__type(value, struct event);
+} print_events SEC(".maps");
 
 static __always_inline bool valid_uid(uid_t uid) {
 	return uid != INVALID_UID;
@@ -146,7 +146,7 @@ int ig_execve_x(struct trace_event_raw_sys_exit* ctx)
 	bpf_get_current_comm(&event->comm, sizeof(event->comm));
 	size_t len = EVENT_SIZE(event);
 	if (len <= sizeof(*event))
-		bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, event, len);
+		bpf_perf_event_output(ctx, &print_events, BPF_F_CURRENT_CPU, event, len);
 cleanup:
 	bpf_map_delete_elem(&execs, &pid);
 	return 0;

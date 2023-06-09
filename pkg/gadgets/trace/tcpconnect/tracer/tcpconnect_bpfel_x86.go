@@ -102,10 +102,10 @@ type tcpconnectProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type tcpconnectMapSpecs struct {
-	Events               *ebpf.MapSpec `ebpf:"events"`
 	GadgetMntnsFilterMap *ebpf.MapSpec `ebpf:"gadget_mntns_filter_map"`
 	Ipv4Count            *ebpf.MapSpec `ebpf:"ipv4_count"`
 	Ipv6Count            *ebpf.MapSpec `ebpf:"ipv6_count"`
+	PrintEvents          *ebpf.MapSpec `ebpf:"print_events"`
 	SocketsLatency       *ebpf.MapSpec `ebpf:"sockets_latency"`
 	SocketsPerProcess    *ebpf.MapSpec `ebpf:"sockets_per_process"`
 }
@@ -129,20 +129,20 @@ func (o *tcpconnectObjects) Close() error {
 //
 // It can be passed to loadTcpconnectObjects or ebpf.CollectionSpec.LoadAndAssign.
 type tcpconnectMaps struct {
-	Events               *ebpf.Map `ebpf:"events"`
 	GadgetMntnsFilterMap *ebpf.Map `ebpf:"gadget_mntns_filter_map"`
 	Ipv4Count            *ebpf.Map `ebpf:"ipv4_count"`
 	Ipv6Count            *ebpf.Map `ebpf:"ipv6_count"`
+	PrintEvents          *ebpf.Map `ebpf:"print_events"`
 	SocketsLatency       *ebpf.Map `ebpf:"sockets_latency"`
 	SocketsPerProcess    *ebpf.Map `ebpf:"sockets_per_process"`
 }
 
 func (m *tcpconnectMaps) Close() error {
 	return _TcpconnectClose(
-		m.Events,
 		m.GadgetMntnsFilterMap,
 		m.Ipv4Count,
 		m.Ipv6Count,
+		m.PrintEvents,
 		m.SocketsLatency,
 		m.SocketsPerProcess,
 	)
