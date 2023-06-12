@@ -40,10 +40,6 @@ type Event struct {
 	DstEndpoint eventtypes.Endpoint `json:"dst,omitempty" column:"dst"`
 }
 
-func (e *Event) SetLocalPodDetails(owner, hostIP, podIP string, labels map[string]string) {
-	// Unused
-}
-
 func (e *Event) GetEndpoints() []*eventtypes.Endpoint {
 	return []*eventtypes.Endpoint{&e.SrcEndpoint, &e.DstEndpoint}
 }
