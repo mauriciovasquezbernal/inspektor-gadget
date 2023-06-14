@@ -29,10 +29,12 @@ import (
 	ocispec "github.com/opencontainers/runtime-spec/specs-go"
 
 	containercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/container-collection"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/container-hook"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	pb "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgettracermanager/api"
 	containersmap "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgettracermanager/containers-map"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/runcfanotify"
 	tracercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/tracer-collection"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
@@ -268,15 +270,29 @@ func NewServer(conf *Conf) (*GadgetTracerManager, error) {
 			opts = append(opts, containercollection.WithInitialKubernetesContainers(g.nodeName))
 		}
 	case "auto":
-		log.Infof("GadgetTracerManager: hook mode: fanotify (auto)")
-		opts = append(opts, containercollection.WithContainerFanotify())
-		opts = append(opts, containercollection.WithInitialKubernetesContainers(g.nodeName))
+		if containerhook.Supported() {
+			log.Infof("GadgetTracerManager: hook mode: fanotify+ebpf (auto)")
+			opts = append(opts, containercollection.WithContainerFanotify())
+			opts = append(opts, containercollection.WithInitialKubernetesContainers(g.nodeName))
+		} else if runcfanotify.Supported() {
+			log.Infof("GadgetTracerManager: hook mode: fanotify (auto)")
+			opts = append(opts, containercollection.WithRuncFanotify())
+			opts = append(opts, containercollection.WithInitialKubernetesContainers(g.nodeName))
+		} else {
+			log.Infof("GadgetTracerManager: hook mode: podinformer (auto)")
+			opts = append(opts, containercollection.WithPodInformer(g.nodeName))
+			podInformerUsed = true
+		}
 	case "podinformer":
 		log.Infof("GadgetTracerManager: hook mode: podinformer")
 		opts = append(opts, containercollection.WithPodInformer(g.nodeName))
 		podInformerUsed = true
 	case "fanotify":
 		log.Infof("GadgetTracerManager: hook mode: fanotify")
+		opts = append(opts, containercollection.WithRuncFanotify())
+		opts = append(opts, containercollection.WithInitialKubernetesContainers(g.nodeName))
+	case "fanotify+ebpf":
+		log.Infof("GadgetTracerManager: hook mode: fanotify+ebpf")
 		opts = append(opts, containercollection.WithContainerFanotify())
 		opts = append(opts, containercollection.WithInitialKubernetesContainers(g.nodeName))
 	default:
