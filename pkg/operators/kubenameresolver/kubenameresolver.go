@@ -19,6 +19,7 @@
 package kubenameresolver
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
@@ -70,7 +71,10 @@ func (k *KubeNameResolver) CanOperateOn(gadget gadgets.GadgetDesc) bool {
 }
 
 func (k *KubeNameResolver) Init(params *params.Params) error {
-	k8sInventory := common.GetK8sInventoryCache()
+	k8sInventory, err := common.GetK8sInventoryCache()
+	if err != nil {
+		return fmt.Errorf("creating k8s inventory cache: %w", err)
+	}
 	k.k8sInventory = k8sInventory
 	return nil
 }

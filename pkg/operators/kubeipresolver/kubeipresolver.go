@@ -17,6 +17,8 @@
 package kubeipresolver
 
 import (
+	"fmt"
+
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators/common"
@@ -29,7 +31,7 @@ const (
 )
 
 type KubeIPResolverInterface interface {
-	GetEndpoints() []*types.Endpoint
+	GetEndpoints() []*types.L3Endpoint
 }
 
 type KubeIPResolver struct {
@@ -62,7 +64,11 @@ func (k *KubeIPResolver) CanOperateOn(gadget gadgets.GadgetDesc) bool {
 }
 
 func (k *KubeIPResolver) Init(params *params.Params) error {
-	k.k8sInventory = common.GetK8sInventoryCache()
+	k8sInventory, err := common.GetK8sInventoryCache()
+	if err != nil {
+		return fmt.Errorf("creating k8s inventory cache: %w", err)
+	}
+	k.k8sInventory = k8sInventory
 	return nil
 }
 
@@ -100,10 +106,8 @@ func (m *KubeIPResolverInstance) PostGadgetRun() error {
 }
 
 func (m *KubeIPResolverInstance) enrich(ev any) {
-	additionalInfo, _ := ev.(KubeIPResolverInterface)
-
 	pods := m.manager.k8sInventory.GetPods()
-	endpoints := additionalInfo.GetEndpoints()
+	endpoints := ev.(KubeIPResolverInterface).GetEndpoints()
 	for j := range endpoints {
 		// initialize to this default value if we don't find a match
 		endpoints[j].Kind = types.EndpointKindRaw

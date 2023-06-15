@@ -58,7 +58,7 @@ func TestAdviseNetworkpolicy(t *testing.T) {
 					Proto:     "tcp",
 					PodLabels: map[string]string{"run": "test-pod"},
 					Port:      9090,
-					DstEndpoint: eventtypes.Endpoint{
+					DstEndpoint: eventtypes.L3Endpoint{
 						Kind:      eventtypes.EndpointKindService,
 						Namespace: nsServer,
 						Name:      "test-pod",
@@ -112,7 +112,7 @@ func TestAdviseNetworkpolicy(t *testing.T) {
 					Proto:     "tcp",
 					PodLabels: map[string]string{"run": "test-pod"},
 					Port:      9090,
-					DstEndpoint: eventtypes.Endpoint{
+					DstEndpoint: eventtypes.L3Endpoint{
 						Kind:      eventtypes.EndpointKindPod,
 						Namespace: nsClient,
 						Name:      "test-pod",

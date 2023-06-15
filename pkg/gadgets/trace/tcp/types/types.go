@@ -30,12 +30,12 @@ type Event struct {
 	Comm      string `json:"comm,omitempty" column:"comm,template:comm"`
 	IPVersion int    `json:"ipversion,omitempty" column:"ip,template:ipversion"`
 
-	SrcEndpoint eventtypes.Endpoint `json:"src,omitempty" column:"src"`
-	DstEndpoint eventtypes.Endpoint `json:"dst,omitempty" column:"dst"`
+	SrcEndpoint eventtypes.L4Endpoint `json:"src,omitempty" column:"src"`
+	DstEndpoint eventtypes.L4Endpoint `json:"dst,omitempty" column:"dst"`
 }
 
-func (e *Event) GetEndpoints() []*eventtypes.Endpoint {
-	return []*eventtypes.Endpoint{&e.SrcEndpoint, &e.DstEndpoint}
+func (e *Event) GetEndpoints() []*eventtypes.L3Endpoint {
+	return []*eventtypes.L3Endpoint{&e.SrcEndpoint.L3Endpoint, &e.DstEndpoint.L3Endpoint}
 }
 
 func GetColumns() *columns.Columns[Event] {
@@ -56,7 +56,7 @@ func GetColumns() *columns.Columns[Event] {
 		return "U"
 	})
 
-	eventtypes.MustAddVirtualEndpointColumn(
+	eventtypes.MustAddVirtualL4EndpointColumn(
 		tcpColumns,
 		columns.Attributes{
 			Name:    "src",
@@ -64,8 +64,9 @@ func GetColumns() *columns.Columns[Event] {
 			Width:   30,
 			Order:   2000,
 		},
-		func(e *Event) eventtypes.Endpoint { return e.SrcEndpoint })
-	eventtypes.MustAddVirtualEndpointColumn(
+		func(e *Event) eventtypes.L4Endpoint { return e.SrcEndpoint },
+	)
+	eventtypes.MustAddVirtualL4EndpointColumn(
 		tcpColumns,
 		columns.Attributes{
 			Name:    "dst",
@@ -73,7 +74,7 @@ func GetColumns() *columns.Columns[Event] {
 			Width:   30,
 			Order:   3000,
 		},
-		func(e *Event) eventtypes.Endpoint { return e.DstEndpoint })
+		func(e *Event) eventtypes.L4Endpoint { return e.DstEndpoint })
 
 	return tcpColumns
 }

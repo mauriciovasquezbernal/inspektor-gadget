@@ -123,10 +123,9 @@ func (c *CommonData) GetContainer() string {
 	return c.Container
 }
 
-type Endpoint struct {
-	// Addr and the Port is filled by the gadget
+type L3Endpoint struct {
+	// Addr is filled by the gadget
 	Addr string `json:"addr,omitempty" column:"addr,hide,template:ipaddr"`
-	Port uint16 `json:"port,omitempty" column:"port,hide,template:ipport"`
 
 	// Namespace, Name, Kind and PodLabels gets populated by the KubeIPResolver operator
 	Namespace string            `json:"namespace,omitempty" column:"ns,template:namespace,hide"`
@@ -135,21 +134,53 @@ type Endpoint struct {
 	PodLabels map[string]string `json:"podlabels,omitempty" column:"podLabels,hide"`
 }
 
-func MustAddVirtualEndpointColumn[Event any](cols *columns.Columns[Event], attr columns.Attributes, getEndpoint func(*Event) Endpoint) {
+func (e *L3Endpoint) String() string {
+	switch e.Kind {
+	case EndpointKindPod:
+		return "p/" + e.Namespace + "/" + e.Name
+	case EndpointKindService:
+		return "s/" + e.Namespace + "/" + e.Name
+	case EndpointKindRaw:
+		return "r/" + e.Addr
+	default:
+		return e.Addr
+	}
+}
+
+type L4Endpoint struct {
+	L3Endpoint
+	// Port is filled by the gadget
+	Port uint16 `json:"port,omitempty" column:"port,hide,template:ipport"`
+}
+
+func (e *L4Endpoint) String() string {
+	return e.L3Endpoint.String() + ":" + fmt.Sprint(e.Port)
+}
+
+func MustAddVirtualL4EndpointColumn[Event any](
+	cols *columns.Columns[Event],
+	attr columns.Attributes,
+	getEndpoint func(*Event) L4Endpoint,
+) {
 	cols.MustAddColumn(
 		attr,
 		func(e *Event) string {
 			endpoint := getEndpoint(e)
-			switch endpoint.Kind {
-			case EndpointKindPod:
-				return "p/" + endpoint.Namespace + "/" + endpoint.Name + ":" + fmt.Sprint(endpoint.Port)
-			case EndpointKindService:
-				return "s/" + endpoint.Namespace + "/" + endpoint.Name + ":" + fmt.Sprint(endpoint.Port)
-			case EndpointKindRaw:
-				return "r/" + endpoint.Addr + ":" + fmt.Sprint(endpoint.Port)
-			default:
-				return endpoint.Addr + ":" + fmt.Sprint(endpoint.Port)
-			}
+			return endpoint.String()
+		},
+	)
+}
+
+func MustAddVirtualL3EndpointColumn[Event any](
+	cols *columns.Columns[Event],
+	attr columns.Attributes,
+	getEndpoint func(*Event) L3Endpoint,
+) {
+	cols.MustAddColumn(
+		attr,
+		func(e *Event) string {
+			endpoint := getEndpoint(e)
+			return endpoint.String()
 		},
 	)
 }

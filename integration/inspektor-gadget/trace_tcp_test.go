@@ -40,12 +40,12 @@ func TestTraceTcp(t *testing.T) {
 				IPVersion: 4,
 				Operation: "connect",
 
-				SrcEndpoint: eventtypes.Endpoint{
+				SrcEndpoint: eventtypes.L3Endpoint{
 					Addr: "127.0.0.1",
 					Kind: eventtypes.EndpointKindRaw,
 				},
 
-				DstEndpoint: eventtypes.Endpoint{
+				DstEndpoint: eventtypes.L3Endpoint{
 					Addr: "127.0.0.1",
 					Port: 80,
 					Kind: eventtypes.EndpointKindRaw,

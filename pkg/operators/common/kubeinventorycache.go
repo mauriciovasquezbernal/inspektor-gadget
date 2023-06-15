@@ -47,18 +47,15 @@ type K8sInventoryCache struct {
 
 var (
 	cache *K8sInventoryCache
+	err   error
 	once  sync.Once
 )
 
-func GetK8sInventoryCache() *K8sInventoryCache {
+func GetK8sInventoryCache() (*K8sInventoryCache, error) {
 	once.Do(func() {
-		var err error
 		cache, err = newCache(1 * time.Second)
-		if err != nil {
-			panic(fmt.Errorf("creating new k8s inventory cache: %w", err))
-		}
 	})
-	return cache
+	return cache, err
 }
 
 func newCache(tickerDuration time.Duration) (*K8sInventoryCache, error) {

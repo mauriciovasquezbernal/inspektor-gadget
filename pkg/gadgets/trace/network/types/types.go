@@ -15,8 +15,6 @@
 package types
 
 import (
-	"fmt"
-
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/columns"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/columns/ellipsis"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/environment"
@@ -45,7 +43,7 @@ type Event struct {
 	PodOwner  string            `json:"podOwner,omitempty" column:"podowner,hide"`
 	PodLabels map[string]string `json:"podLabels,omitempty" column:"podlabels,hide"`
 
-	DstEndpoint eventtypes.Endpoint `json:"dst,omitempty" column:"dst"`
+	DstEndpoint eventtypes.L3Endpoint `json:"dst,omitempty" column:"dst"`
 }
 
 func (e *Event) SetLocalPodDetails(owner, hostIP, podIP string, labels map[string]string) {
@@ -55,33 +53,24 @@ func (e *Event) SetLocalPodDetails(owner, hostIP, podIP string, labels map[strin
 	e.PodLabels = labels
 }
 
-func (e *Event) GetEndpoints() []*eventtypes.Endpoint {
-	return []*eventtypes.Endpoint{&e.DstEndpoint}
+func (e *Event) GetEndpoints() []*eventtypes.L3Endpoint {
+	return []*eventtypes.L3Endpoint{&e.DstEndpoint}
 }
 
 func GetColumns() *columns.Columns[Event] {
 	cols := columns.MustCreateColumns[Event]()
 
-	// Can't use eventtypes.MustAddVirtualEndpointColumn here because we don't capture port information and don't want to display it
-	cols.MustAddColumn(columns.Attributes{
-		Name:         "remote",
-		Width:        32,
-		MinWidth:     21,
-		Visible:      true,
-		Order:        1000,
-		EllipsisType: ellipsis.Start,
-	}, func(e *Event) string {
-		switch e.DstEndpoint.Kind {
-		case eventtypes.EndpointKindPod:
-			return fmt.Sprintf("pod %s/%s", e.DstEndpoint.Namespace, e.DstEndpoint.Name)
-		case eventtypes.EndpointKindService:
-			return fmt.Sprintf("svc %s/%s", e.DstEndpoint.Namespace, e.DstEndpoint.Name)
-		case eventtypes.EndpointKindRaw:
-			return fmt.Sprintf("endpoint %s", e.DstEndpoint.Addr)
-		default:
-			return e.DstEndpoint.Addr
-		}
-	})
+	eventtypes.MustAddVirtualL3EndpointColumn(
+		cols,
+		columns.Attributes{
+			Name:         "remote",
+			Width:        32,
+			MinWidth:     21,
+			Visible:      true,
+			Order:        1000,
+			EllipsisType: ellipsis.Start,
+		},
+		func(e *Event) eventtypes.L3Endpoint { return e.DstEndpoint })
 
 	// Hide container column for kubernetes environment
 	if environment.Environment == environment.Kubernetes {

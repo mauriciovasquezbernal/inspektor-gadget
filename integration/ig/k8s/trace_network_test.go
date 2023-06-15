@@ -58,7 +58,7 @@ func TestTraceNetwork(t *testing.T) {
 					PktType: "OUTGOING",
 					Proto:   "tcp",
 					Port:    80,
-					DstEndpoint: eventtypes.Endpoint{
+					DstEndpoint: eventtypes.L3Endpoint{
 						Addr: nginxIP,
 					},
 				},
@@ -77,7 +77,7 @@ func TestTraceNetwork(t *testing.T) {
 					PktType: "HOST",
 					Proto:   "tcp",
 					Port:    80,
-					DstEndpoint: eventtypes.Endpoint{
+					DstEndpoint: eventtypes.L3Endpoint{
 						Addr: testPodIP,
 					},
 				},

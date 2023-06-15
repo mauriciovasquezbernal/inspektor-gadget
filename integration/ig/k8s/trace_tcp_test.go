@@ -36,11 +36,11 @@ func TestTraceTCP(t *testing.T) {
 				Event:     BuildBaseEvent(ns),
 				Comm:      "curl",
 				IPVersion: 4,
-				SrcEndpoint: eventtypes.Endpoint{
+				SrcEndpoint: eventtypes.L3Endpoint{
 					Addr: "127.0.0.1",
 				},
 
-				DstEndpoint: eventtypes.Endpoint{
+				DstEndpoint: eventtypes.L3Endpoint{
 					Addr: "127.0.0.1",
 					Port: 80,
 				},

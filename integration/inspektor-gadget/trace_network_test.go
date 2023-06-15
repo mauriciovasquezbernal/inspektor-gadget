@@ -62,7 +62,7 @@ func TestTraceNetwork(t *testing.T) {
 					PodIP:     testPodIP,
 					PodLabels: map[string]string{"run": "test-pod"},
 					Port:      80,
-					DstEndpoint: eventtypes.Endpoint{
+					DstEndpoint: eventtypes.L3Endpoint{
 						Addr:      nginxIP,
 						Namespace: ns,
 						Name:      "nginx-pod",
@@ -87,7 +87,7 @@ func TestTraceNetwork(t *testing.T) {
 					PodIP:     nginxIP,
 					PodLabels: map[string]string{"run": "nginx-pod"},
 					Port:      80,
-					DstEndpoint: eventtypes.Endpoint{
+					DstEndpoint: eventtypes.L3Endpoint{
 						Addr:      testPodIP,
 						Namespace: ns,
 						Name:      "test-pod",
