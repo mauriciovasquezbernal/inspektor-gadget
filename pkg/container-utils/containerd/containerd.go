@@ -145,7 +145,7 @@ func (c *ContainerdClient) GetContainer(containerID string) (*runtimeclient.Cont
 }
 
 func (c *ContainerdClient) GetContainerDetails(containerID string) (*runtimeclient.ContainerDetailsData, error) {
-	containerID, err := runtimeclient.ParseContainerID(runtimeclient.ContainerdName, containerID)
+	containerID, err := runtimeclient.ParseContainerID(types.RuntimeNameContainerd, containerID)
 	if err != nil {
 		return nil, err
 	}
