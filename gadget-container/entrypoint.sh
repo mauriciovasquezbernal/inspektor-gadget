@@ -41,6 +41,18 @@ echo $GADGET_IMAGE
 
 echo "Gadget image flavour: ${GADGET_IMAGE_FLAVOUR}"
 
+echo -n "Namespaces settings: "
+if [ "$(stat -L -c %i /proc/self/ns/pid)" = "$(stat -L -c %i /host/proc/1/ns/pid)" ] ; then
+  echo -n "hostPID=true "
+else
+  echo -n "hostPID=false "
+fi
+if [ "$(stat -L -c %i /proc/self/ns/net)" = "$(stat -L -c %i /host/proc/1/ns/net)" ] ; then
+  echo "hostNetwork=true"
+else
+  echo "hostNetwork=false"
+fi
+
 echo "Deployment options:"
 env | grep '^INSPEKTOR_GADGET_OPTION_.*='
 
