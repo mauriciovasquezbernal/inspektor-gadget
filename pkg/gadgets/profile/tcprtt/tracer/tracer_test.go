@@ -341,7 +341,7 @@ type testDefinition struct {
 	expectedResult  expectedResult
 }
 
-func testRunWithResult(t *testing.T, serverPort int, serverIP, clientIP net.IP, ipVersion int, defs map[string]testDefinition) {
+func testRunWithResult(t *testing.T, serverPort int, serverIP, clientIP net.IP, ipVersion int) {
 	// TODO: Use random IPs.
 	startTCPServer(t, serverIP, serverPort, ipVersion)
 
@@ -350,6 +350,216 @@ func testRunWithResult(t *testing.T, serverPort int, serverIP, clientIP net.IP, 
 		// level, so we don't need to generate the events in an isolated
 		// network namespace.
 		HostNetwork: true,
+	}
+
+	var paramFilterLocalAddress, paramFilterRemoteAddress string
+	switch ipVersion {
+	case 4:
+		paramFilterLocalAddress = ParamFilterLocalAddress
+		paramFilterRemoteAddress = ParamFilterRemoteAddress
+	case 6:
+		paramFilterLocalAddress = ParamFilterLocalAddressV6
+		paramFilterRemoteAddress = ParamFilterRemoteAddressV6
+	}
+
+	gadget := &GadgetDesc{}
+	defs := map[string]testDefinition{
+		"with_default_params": {
+			getGadgetParams: func() *params.Params {
+				return gadget.ParamDescs().ToParams()
+			},
+			expectedResult: expectedResult{
+				minHistograms: 1,
+			},
+		},
+		"with_default_params_and_timeout": {
+			timeout: 5 * time.Second,
+			getGadgetParams: func() *params.Params {
+				return gadget.ParamDescs().ToParams()
+			},
+			expectedResult: expectedResult{
+				minHistograms: 1,
+			},
+		},
+		"with_milliseconds": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(ParamMilliseconds).Set("true")
+				return params
+			},
+			expectedResult: expectedResult{
+				minHistograms:   1,
+				useMilliseconds: true,
+			},
+		},
+		"by_local_addr": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(ParamByLocalAddress).Set("true")
+				return params
+			},
+			expectedResult: expectedResult{
+				minHistograms: 1,
+				byLocalAddr:   clientIP.String(),
+			},
+		},
+		"by_remote_addr": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(ParamByRemoteAddress).Set("true")
+				return params
+			},
+			expectedResult: expectedResult{
+				minHistograms: 1,
+				byRemoteAddr:  serverIP.String(),
+			},
+		},
+		"filter_by_laddr": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(paramFilterLocalAddress).Set(clientIP.String())
+				return params
+			},
+			expectedResult: expectedResult{
+				exactHistograms: 1,
+			},
+		},
+		"filter_by_invalid_laddr": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(paramFilterLocalAddress).Set("0.1.0.1")
+				return params
+			},
+			expectedResult: expectedResult{
+				err: true,
+			},
+		},
+		"filter_by_raddr": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(paramFilterRemoteAddress).Set(serverIP.String())
+				return params
+			},
+			expectedResult: expectedResult{
+				exactHistograms: 1,
+			},
+		},
+		"filter_by_invalid_raddr": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(ParamFilterRemoteAddress).Set("0.1.0.1")
+				return params
+			},
+			expectedResult: expectedResult{
+				err: true,
+			},
+		},
+		"filter_by_laddr_and_raddr": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(paramFilterLocalAddress).Set(clientIP.String())
+				params.Get(paramFilterRemoteAddress).Set(serverIP.String())
+				return params
+			},
+			expectedResult: expectedResult{
+				exactHistograms: 1,
+			},
+		},
+		"filter_by_laddr_and_raddr_msec": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(paramFilterLocalAddress).Set(clientIP.String())
+				params.Get(paramFilterRemoteAddress).Set(serverIP.String())
+				params.Get(ParamMilliseconds).Set("true")
+				return params
+			},
+			expectedResult: expectedResult{
+				exactHistograms: 1,
+				useMilliseconds: true,
+			},
+		},
+		"filter_by_invalid_laddr_and_raddr": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(ParamFilterLocalAddress).Set("1.0.0.1")
+				params.Get(paramFilterRemoteAddress).Set(serverIP.String())
+				return params
+			},
+			expectedResult: expectedResult{
+				err: true,
+			},
+		},
+		"filter_by_laddr_and_invalid_raddr": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(paramFilterLocalAddress).Set(clientIP.String())
+				params.Get(paramFilterRemoteAddress).Set("1.0.0.1")
+				return params
+			},
+			expectedResult: expectedResult{
+				err: true,
+			},
+		},
+		"filter_by_invalid_laddr_and_invalid_raddr": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(ParamFilterLocalAddress).Set("1.0.0.1")
+				params.Get(paramFilterRemoteAddress).Set("1.0.0.1")
+				return params
+			},
+			expectedResult: expectedResult{
+				err: true,
+			},
+		},
+		"mix_by_local_and_filter_by_raddr": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(ParamByLocalAddress).Set("true")
+				params.Get(paramFilterRemoteAddress).Set(serverIP.String())
+				return params
+			},
+			expectedResult: expectedResult{
+				exactHistograms: 1,
+				byLocalAddr:     clientIP.String(),
+			},
+		},
+		"mix_by_local_and_filter_by_laddr": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(ParamByLocalAddress).Set("true")
+				params.Get(paramFilterLocalAddress).Set(clientIP.String())
+				return params
+			},
+			expectedResult: expectedResult{
+				exactHistograms: 1,
+				byLocalAddr:     clientIP.String(),
+			},
+		},
+		"mix_by_remote_and_filter_by_laddr": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(ParamByRemoteAddress).Set("true")
+				params.Get(paramFilterLocalAddress).Set(clientIP.String())
+				return params
+			},
+			expectedResult: expectedResult{
+				exactHistograms: 1,
+				byRemoteAddr:    serverIP.String(),
+			},
+		},
+		"mix_by_remote_and_filter_by_raddr": {
+			getGadgetParams: func() *params.Params {
+				params := gadget.ParamDescs().ToParams()
+				params.Get(ParamByRemoteAddress).Set("true")
+				params.Get(paramFilterRemoteAddress).Set(serverIP.String())
+				return params
+			},
+			expectedResult: expectedResult{
+				exactHistograms: 1,
+				byRemoteAddr:    serverIP.String(),
+			},
+		},
+		// TODO: Test mix cases with clients and servers with different IPs
 	}
 
 	for name, test := range defs {
@@ -494,212 +704,8 @@ func TestRunWithResultV4(t *testing.T) {
 
 	serverIP := net.IPv4(127, 80, 80, 80)
 	clientIP := net.IPv4(127, 127, 127, 127)
-	gadget := &GadgetDesc{}
 
-	testRunWithResult(t,
-		8080,
-		serverIP,
-		clientIP,
-		4,
-		map[string]testDefinition{
-			"with_default_params": {
-				getGadgetParams: func() *params.Params {
-					return gadget.ParamDescs().ToParams()
-				},
-				expectedResult: expectedResult{
-					minHistograms: 1,
-				},
-			},
-			"with_default_params_and_timeout": {
-				timeout: 5 * time.Second,
-				getGadgetParams: func() *params.Params {
-					return gadget.ParamDescs().ToParams()
-				},
-				expectedResult: expectedResult{
-					minHistograms: 1,
-				},
-			},
-			"with_milliseconds": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamMilliseconds).Set("true")
-					return params
-				},
-				expectedResult: expectedResult{
-					minHistograms:   1,
-					useMilliseconds: true,
-				},
-			},
-			"by_local_addr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamByLocalAddress).Set("true")
-					return params
-				},
-				expectedResult: expectedResult{
-					minHistograms: 1,
-					byLocalAddr:   clientIP.String(),
-				},
-			},
-			"by_remote_addr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamByRemoteAddress).Set("true")
-					return params
-				},
-				expectedResult: expectedResult{
-					minHistograms: 1,
-					byRemoteAddr:  serverIP.String(),
-				},
-			},
-			"filter_by_laddr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterLocalAddress).Set(clientIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-				},
-			},
-			"filter_by_invalid_laddr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterLocalAddress).Set("0.1.0.1")
-					return params
-				},
-				expectedResult: expectedResult{
-					err: true,
-				},
-			},
-			"filter_by_raddr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterRemoteAddress).Set(serverIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-				},
-			},
-			"filter_by_invalid_raddr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterRemoteAddress).Set("0.1.0.1")
-					return params
-				},
-				expectedResult: expectedResult{
-					err: true,
-				},
-			},
-			"filter_by_laddr_and_raddr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterLocalAddress).Set(clientIP.String())
-					params.Get(ParamFilterRemoteAddress).Set(serverIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-				},
-			},
-			"filter_by_laddr_and_raddr_msec": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterLocalAddress).Set(clientIP.String())
-					params.Get(ParamFilterRemoteAddress).Set(serverIP.String())
-					params.Get(ParamMilliseconds).Set("true")
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-					useMilliseconds: true,
-				},
-			},
-			"filter_by_invalid_laddr_and_raddr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterLocalAddress).Set("1.0.0.1")
-					params.Get(ParamFilterRemoteAddress).Set(serverIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					err: true,
-				},
-			},
-			"filter_by_laddr_and_invalid_raddr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterLocalAddress).Set(clientIP.String())
-					params.Get(ParamFilterRemoteAddress).Set("1.0.0.1")
-					return params
-				},
-				expectedResult: expectedResult{
-					err: true,
-				},
-			},
-			"filter_by_invalid_laddr_and_invalid_raddr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterLocalAddress).Set("1.0.0.1")
-					params.Get(ParamFilterRemoteAddress).Set("1.0.0.1")
-					return params
-				},
-				expectedResult: expectedResult{
-					err: true,
-				},
-			},
-			"mix_by_local_and_filter_by_raddr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamByLocalAddress).Set("true")
-					params.Get(ParamFilterRemoteAddress).Set(serverIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-					byLocalAddr:     clientIP.String(),
-				},
-			},
-			"mix_by_local_and_filter_by_laddr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamByLocalAddress).Set("true")
-					params.Get(ParamFilterLocalAddress).Set(clientIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-					byLocalAddr:     clientIP.String(),
-				},
-			},
-			"mix_by_remote_and_filter_by_laddr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamByRemoteAddress).Set("true")
-					params.Get(ParamFilterLocalAddress).Set(clientIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-					byRemoteAddr:    serverIP.String(),
-				},
-			},
-			"mix_by_remote_and_filter_by_raddr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamByRemoteAddress).Set("true")
-					params.Get(ParamFilterRemoteAddress).Set(serverIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-					byRemoteAddr:    serverIP.String(),
-				},
-			},
-			// TODO: Test mix cases with clients and servers with different IPs
-		},
-	)
+	testRunWithResult(t, 8080, serverIP, clientIP, 4)
 }
 
 func TestRunWithResultV6(t *testing.T) {
@@ -709,188 +715,8 @@ func TestRunWithResultV6(t *testing.T) {
 
 	clientIP := net.ParseIP("::1")
 	serverIP := net.ParseIP("::1")
-	gadget := &GadgetDesc{}
 
-	testRunWithResult(t,
-		8080,
-		serverIP,
-		clientIP,
-		6,
-		map[string]testDefinition{
-			"with_default_params": {
-				getGadgetParams: func() *params.Params {
-					return gadget.ParamDescs().ToParams()
-				},
-				expectedResult: expectedResult{
-					minHistograms: 1,
-				},
-			},
-			"with_default_params_and_timeout": {
-				timeout: 5 * time.Second,
-				getGadgetParams: func() *params.Params {
-					return gadget.ParamDescs().ToParams()
-				},
-				expectedResult: expectedResult{
-					minHistograms: 1,
-				},
-			},
-			"by_local_addr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamByLocalAddress).Set("true")
-					return params
-				},
-				expectedResult: expectedResult{
-					minHistograms: 1,
-					byLocalAddr:   clientIP.String(),
-				},
-			},
-			"by_remote_addr": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamByRemoteAddress).Set("true")
-					return params
-				},
-				expectedResult: expectedResult{
-					minHistograms: 1,
-					byRemoteAddr:  serverIP.String(),
-				},
-			},
-			"filter_by_laddr_v6": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterLocalAddressV6).Set(clientIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-				},
-			},
-			"filter_by_invalid_laddr_v6": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterLocalAddressV6).Set("0.1.0.1")
-					return params
-				},
-				expectedResult: expectedResult{
-					err: true,
-				},
-			},
-			"filter_by_raddr_v6": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterRemoteAddressV6).Set(serverIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-				},
-			},
-			"filter_by_invalid_raddr_v6": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterRemoteAddressV6).Set("0.1.0.1")
-					return params
-				},
-				expectedResult: expectedResult{
-					err: true,
-				},
-			},
-			"filter_by_laddr_v6_and_raddr_v6": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterLocalAddressV6).Set(clientIP.String())
-					params.Get(ParamFilterRemoteAddressV6).Set(serverIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-				},
-			},
-			"filter_by_invalid_laddr_v6_and_raddr_v6": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterLocalAddressV6).Set("1.0.0.1")
-					params.Get(ParamFilterRemoteAddressV6).Set(serverIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					err: true,
-				},
-			},
-			"filter_by_laddr_v6_and_invalid_raddr_v6": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterLocalAddressV6).Set(clientIP.String())
-					params.Get(ParamFilterRemoteAddressV6).Set("1.0.0.1")
-					return params
-				},
-				expectedResult: expectedResult{
-					err: true,
-				},
-			},
-			"filter_by_invalid_laddr_v6_and_invalid_raddr_v6": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamFilterLocalAddressV6).Set("1.0.0.1")
-					params.Get(ParamFilterRemoteAddressV6).Set("1.0.0.1")
-					return params
-				},
-				expectedResult: expectedResult{
-					err: true,
-				},
-			},
-			"mix_by_local_and_filter_by_raddr_v6": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamByLocalAddress).Set("true")
-					params.Get(ParamFilterRemoteAddressV6).Set(serverIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-					byLocalAddr:     clientIP.String(),
-				},
-			},
-			"mix_by_local_and_filter_by_laddr_v6": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamByLocalAddress).Set("true")
-					params.Get(ParamFilterLocalAddressV6).Set(clientIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-					byLocalAddr:     clientIP.String(),
-				},
-			},
-			"mix_by_remote_and_filter_by_laddr_v6": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamByRemoteAddress).Set("true")
-					params.Get(ParamFilterLocalAddressV6).Set(clientIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-					byRemoteAddr:    serverIP.String(),
-				},
-			},
-			"mix_by_remote_and_filter_by_raddr_v6": {
-				getGadgetParams: func() *params.Params {
-					params := gadget.ParamDescs().ToParams()
-					params.Get(ParamByRemoteAddress).Set("true")
-					params.Get(ParamFilterRemoteAddressV6).Set(serverIP.String())
-					return params
-				},
-				expectedResult: expectedResult{
-					exactHistograms: 1,
-					byRemoteAddr:    serverIP.String(),
-				},
-			},
-			// TODO: Test mix cases with clients and servers with different IPs
-		},
-	)
+	testRunWithResult(t, 8080, serverIP, clientIP, 6)
 }
 
 func verifyNetError(t *testing.T, err error) {
