@@ -192,7 +192,6 @@ func TestTraceDnsHost(t *testing.T) {
 					Event: eventtypes.Event{
 						Type: eventtypes.NORMAL,
 					},
-					Comm:       "isc-worker0000",
 					Qr:         dnsTypes.DNSPktTypeQuery,
 					Nameserver: dnsServer,
 					PktType:    "OUTGOING",
@@ -203,7 +202,6 @@ func TestTraceDnsHost(t *testing.T) {
 					Event: eventtypes.Event{
 						Type: eventtypes.NORMAL,
 					},
-					Comm:       "isc-worker0000",
 					Qr:         dnsTypes.DNSPktTypeQuery,
 					Nameserver: dnsServer,
 					PktType:    "OUTGOING",
@@ -214,7 +212,6 @@ func TestTraceDnsHost(t *testing.T) {
 					Event: eventtypes.Event{
 						Type: eventtypes.NORMAL,
 					},
-					Comm:       "isc-worker0000",
 					Qr:         dnsTypes.DNSPktTypeQuery,
 					Nameserver: dnsServer,
 					PktType:    "OUTGOING",
@@ -225,6 +222,10 @@ func TestTraceDnsHost(t *testing.T) {
 
 			normalize := func(e *dnsTypes.Event) {
 				e.Timestamp = 0
+				// nslookup has several threads, so we prefer to normalize the command
+				// as it can be hard to guess which thread (nslookup, isc-net-0000,
+				// isc-timer or isc-socket-0) will do the DNS request.
+				e.Comm = ""
 				e.ID = ""
 				e.MountNsID = 0
 				e.NetNsID = 0
