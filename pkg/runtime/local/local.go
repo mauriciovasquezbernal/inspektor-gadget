@@ -27,6 +27,7 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/runtime"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/utils/host"
 )
 
 type Runtime struct {
@@ -78,6 +79,15 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (runtime.CombinedGa
 	log := gadgetCtx.Logger()
 
 	log.Debugf("running with local runtime")
+
+	hostConfig := host.Config{
+		AutoMount:             true,
+		AutoWindowsWorkaround: true,
+	}
+	err := host.Init(hostConfig)
+	if err != nil {
+		return nil, err
+	}
 
 	gadget, ok := gadgetCtx.GadgetDesc().(gadgets.GadgetInstantiate)
 	if !ok {

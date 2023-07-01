@@ -31,6 +31,7 @@ import (
 	igmanager "github.com/inspektor-gadget/inspektor-gadget/pkg/ig-manager"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/utils/host"
 )
 
 const (
@@ -189,6 +190,15 @@ partsLoop:
 	}
 
 	l.rc = rc
+
+	hostConfig := host.Config{
+		AutoMount:             true,
+		AutoWindowsWorkaround: true,
+	}
+	err := host.Init(hostConfig)
+	if err != nil {
+		return err
+	}
 
 	igManager, err := igmanager.NewManager(l.rc)
 	if err != nil {

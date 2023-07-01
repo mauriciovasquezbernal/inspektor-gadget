@@ -37,7 +37,7 @@ import (
 // Read reads the iterator in the host pid namespace.
 // It will test if the current pid namespace is the host pid namespace.
 func Read(iter *link.Iter) ([]byte, error) {
-	if host.IsHostPidNs {
+	if host.IsHostPidNs() {
 		return ReadOnCurrentPidNs(iter)
 	} else {
 		return ReadOnHostPidNs(iter)

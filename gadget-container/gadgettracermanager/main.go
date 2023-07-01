@@ -257,8 +257,17 @@ func main() {
 		if experimental.Enabled() {
 			log.Info("Experimental features enabled")
 		}
-		log.Infof("HostPID=%s", strconv.FormatBool(host.IsHostPidNs))
-		log.Infof("HostNetwork=%s", strconv.FormatBool(host.IsHostNetNs))
+		hostConfig := host.Config{
+			AutoMount:             true,
+			AutoWindowsWorkaround: false,
+		}
+		err := host.Init(hostConfig)
+		if err != nil {
+			log.Fatalf("host.Init() failed: %v", err)
+		}
+
+		log.Infof("HostPID=%s", strconv.FormatBool(host.IsHostPidNs()))
+		log.Infof("HostNetwork=%s", strconv.FormatBool(host.IsHostNetNs()))
 
 		node := os.Getenv("NODE_NAME")
 		if node == "" {
