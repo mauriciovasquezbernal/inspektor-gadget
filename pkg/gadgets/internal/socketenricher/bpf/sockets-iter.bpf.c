@@ -31,6 +31,8 @@ insert_socket_from_iter(struct sock *sock, struct task_struct *task)
 	__builtin_memcpy(&socket_value.task, task->comm, sizeof(socket_value.task));
 	socket_value.mntns = (u64) task->nsproxy->mnt_ns->ns.inum;
 	socket_value.sock = (__u64) sock;
+	if (socket_key.family == AF_INET6)
+		socket_value.ipv6only = BPF_CORE_READ_BITFIELD_PROBED(sock, __sk_common.skc_ipv6only);
 
 	// If the endpoint was not present, add it and we're done.
 	struct sockets_value *old_socket_value =

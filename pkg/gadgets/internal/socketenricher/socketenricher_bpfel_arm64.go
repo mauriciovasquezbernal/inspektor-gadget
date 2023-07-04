@@ -26,6 +26,7 @@ type socketenricherSocketsValue struct {
 	UidGid            uint64
 	Task              [16]int8
 	Sock              uint64
+	Ipv6only          uint64
 	DeletionTimestamp uint64
 }
 
