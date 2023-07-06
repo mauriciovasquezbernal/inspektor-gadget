@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	utilstest "github.com/inspektor-gadget/inspektor-gadget/internal/test"
 )
 
 // events that are generated in the test. Counters are incremented based on them and the metric
@@ -35,6 +37,9 @@ var testEvents = []*stubEvent{
 }
 
 func TestMetrics(t *testing.T) {
+	// local runtime requires root to run host.Init()
+	utilstest.RequireRoot(t)
+
 	type testDefinition struct {
 		name        string
 		config      *Config
