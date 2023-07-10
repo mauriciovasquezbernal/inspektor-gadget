@@ -42,6 +42,8 @@ struct event_t {
 	unsigned char pkt_type;
 	unsigned char rcode;
 
+	__u64 latency_ns; // Set only for responses in a container namespace with pkt_type HOST.
+
 	__u8 name[MAX_DNS_NAME];
 
 	__u16 ancount;
