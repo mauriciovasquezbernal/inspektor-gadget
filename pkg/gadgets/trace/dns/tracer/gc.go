@@ -30,23 +30,22 @@ import (
 // Delay between each garbage collection run.
 const garbageCollectorInterval = 1 * time.Second
 
-// Max age of query before it will be garbage collected.
-const garbageCollectorMaxQueryAge = 10 * time.Second
-
 // garbageCollector runs a background goroutine to delete old query timestamps
 // from the DNS query_map. This ensures that queries that never receive a response
 // are deleted from the map.
 type garbageCollector struct {
-	started  bool
-	doneChan chan struct{}
-	logger   logger.Logger
-	queryMap *ebpf.Map
+	started     bool
+	doneChan    chan struct{}
+	logger      logger.Logger
+	queryMap    *ebpf.Map
+	queryMaxAge time.Duration
 }
 
-func newGarbageCollector(gadgetCtx gadgets.GadgetContext, queryMap *ebpf.Map) *garbageCollector {
+func newGarbageCollector(gadgetCtx gadgets.GadgetContext, queryMap *ebpf.Map, queryMaxAge time.Duration) *garbageCollector {
 	return &garbageCollector{
-		logger:   gadgetCtx.Logger(),
-		queryMap: queryMap,
+		logger:      gadgetCtx.Logger(),
+		queryMap:    queryMap,
+		queryMaxAge: queryMaxAge,
 	}
 }
 
@@ -56,7 +55,7 @@ func (gc *garbageCollector) start() {
 		return
 	}
 
-	gc.logger.Debugf("Starting garbage collection for DNS tracer")
+	gc.logger.Debugf("Starting garbage collection for DNS tracer with queryMaxAge %s", gc.queryMaxAge)
 	gc.doneChan = make(chan struct{}, 0)
 	go gc.runLoop()
 	gc.started = true
@@ -93,7 +92,7 @@ func (gc *garbageCollector) collect() {
 		val          dnsQueryTsT
 		keysToDelete []dnsQueryKeyT
 	)
-	cutoffTs := types.Time(time.Now().Add(-1 * garbageCollectorMaxQueryAge).UnixNano())
+	cutoffTs := types.Time(time.Now().Add(-1 * gc.queryMaxAge).UnixNano())
 	iter := gc.queryMap.Iterate()
 
 	// If the BPF program is deleting keys from the map during iteration,
