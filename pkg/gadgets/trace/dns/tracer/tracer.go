@@ -289,6 +289,8 @@ func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
 		return fmt.Errorf("starting garbage collector: %w", err)
 	}
 
+	t.ctx, t.cancel = gadgetcontext.WithTimeoutOrCancel(gadgetCtx.Context(), gadgetCtx.Timeout())
+
 	return nil
 }
 
@@ -331,22 +333,21 @@ func (t *Tracer) install() error {
 }
 
 func (t *Tracer) startGarbageCollector(gadgetCtx gadgets.GadgetContext) error {
-	// Start a background thread to garbage collect queries without responses
-	// from the queries map (used to calculate DNS latency).
-	queryMap := t.Tracer.GetMap(BPFQueryMapName)
-	if queryMap == nil {
-		return fmt.Errorf("got nil retrieving DNS query map")
-	}
-
 	dnsTimeout := gadgetCtx.GadgetParams().Get(ParamDNSTimeout).AsDuration()
 	if dnsTimeout <= 0 {
 		return fmt.Errorf("DNS timeout must be > 0")
 	}
 
+	queryMap := t.Tracer.GetMap(BPFQueryMapName)
+	if queryMap == nil {
+		return fmt.Errorf("got nil retrieving DNS query map")
+	}
+
+	// Start a background thread to garbage collect queries without responses
+	// from the queries map (used to calculate DNS latency).
 	t.gc = newGarbageCollector(gadgetCtx, queryMap, dnsTimeout)
 	t.gc.start()
 
-	t.ctx, t.cancel = gadgetcontext.WithTimeoutOrCancel(gadgetCtx.Context(), gadgetCtx.Timeout())
 	return nil
 }
 
