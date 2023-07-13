@@ -56,7 +56,7 @@ func (gc *garbageCollector) start() {
 		return
 	}
 
-	gc.logger.Infof("Starting garbage collection for DNS tracer")
+	gc.logger.Debugf("Starting garbage collection for DNS tracer")
 	gc.doneChan = make(chan struct{}, 0)
 	go gc.runLoop()
 	gc.started = true
@@ -68,7 +68,7 @@ func (gc *garbageCollector) stop() {
 		return
 	}
 
-	gc.logger.Infof("Stopping garbage collection for DNS tracer")
+	gc.logger.Debugf("Stopping garbage collection for DNS tracer")
 	close(gc.doneChan)
 	gc.started = false
 }
