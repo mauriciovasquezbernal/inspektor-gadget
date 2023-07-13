@@ -290,7 +290,7 @@ func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
 	if queryMap == nil {
 		return fmt.Errorf("got nil retrieving DNS query map")
 	}
-	t.gc = newGarbageCollector(queryMap)
+	t.gc = newGarbageCollector(gadgetCtx, queryMap)
 	t.gc.start()
 
 	t.ctx, t.cancel = gadgetcontext.WithTimeoutOrCancel(gadgetCtx.Context(), gadgetCtx.Timeout())

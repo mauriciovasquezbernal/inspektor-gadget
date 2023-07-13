@@ -21,9 +21,9 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf"
-	log "github.com/sirupsen/logrus"
 
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
 
@@ -39,20 +39,24 @@ const garbageCollectorMaxQueryAge = 10 * time.Second
 type garbageCollector struct {
 	started  bool
 	doneChan chan struct{}
+	logger   logger.Logger
 	queryMap *ebpf.Map
 }
 
-func newGarbageCollector(queryMap *ebpf.Map) *garbageCollector {
-	return &garbageCollector{queryMap: queryMap}
+func newGarbageCollector(gadgetCtx gadgets.GadgetContext, queryMap *ebpf.Map) *garbageCollector {
+	return &garbageCollector{
+		logger:   gadgetCtx.Logger(),
+		queryMap: queryMap,
+	}
 }
 
 func (gc *garbageCollector) start() {
 	if gc.started {
-		log.Warn("Cannot start DNS queries map garbage collector because it is already running")
+		gc.logger.Warn("Cannot start DNS queries map garbage collector because it is already running")
 		return
 	}
 
-	log.Infof("Starting garbage collection for DNS tracer")
+	gc.logger.Infof("Starting garbage collection for DNS tracer")
 	gc.doneChan = make(chan struct{}, 0)
 	go gc.runLoop()
 	gc.started = true
@@ -60,11 +64,11 @@ func (gc *garbageCollector) start() {
 
 func (gc *garbageCollector) stop() {
 	if !gc.started {
-		log.Warn("Cannot stop DNS queries map garbage collector because it isn't running")
+		gc.logger.Warn("Cannot stop log queries map garbage collector because it isn't running")
 		return
 	}
 
-	log.Infof("Stopping garbage collection for DNS tracer")
+	gc.logger.Infof("Stopping garbage collection for DNS tracer")
 	close(gc.doneChan)
 	gc.started = false
 }
@@ -76,7 +80,7 @@ func (gc *garbageCollector) runLoop() {
 			return
 
 		default:
-			log.Debugf("Executing DNS query map garbage collection")
+			gc.logger.Debugf("Executing DNS query map garbage collection")
 			gc.collect()
 			time.Sleep(garbageCollectorInterval)
 		}
@@ -105,22 +109,22 @@ func (gc *garbageCollector) collect() {
 
 	if err := iter.Err(); err != nil {
 		if errors.Is(err, ebpf.ErrIterationAborted) {
-			log.Warnf("Received ErrIterationAborted when iterating through DNS query map, possibly due to concurrent deletes. Some entries may be skipped this garbage collection cycle.")
+			gc.logger.Warnf("Received ErrIterationAborted when iterating through DNS query map, possibly due to concurrent deletes. Some entries may be skipped this garbage collection cycle.")
 		} else {
-			log.Errorf("Received err %s when iterating through DNS query map", err)
+			gc.logger.Errorf("Received err %s when iterating through DNS query map", err)
 		}
 	}
 
 	for _, key := range keysToDelete {
-		log.Debugf("Deleting key with mntNs=%d and DNS ID=%x from query map for DNS tracer", key.MountNsId, key.Id)
+		gc.logger.Debugf("Deleting key with mntNs=%d and DNS ID=%x from query map for DNS tracer", key.MountNsId, key.Id)
 		err := gc.queryMap.Delete(key)
 		if err != nil {
 			if errors.Is(err, ebpf.ErrKeyNotExist) {
 				// Could happen if the BPF program deleted the key, or if the map iter returned a duplicate key
 				// due to concurrent write operations.
-				log.Debugf("ErrKeyNotExist when trying to delete DNS query timestamp with key mntNs=%d and DNS ID=%x", key.MountNsId, key.Id)
+				gc.logger.Debugf("ErrKeyNotExist when trying to delete DNS query timestamp with key mntNs=%d and DNS ID=%x", key.MountNsId, key.Id)
 			} else {
-				log.Errorf("Could not delete DNS query timestamp with key mntNs=%d and DNS ID=%x, err: %s", key.MountNsId, key.Id, err)
+				gc.logger.Errorf("Could not delete DNS query timestamp with key mntNs=%d and DNS ID=%x, err: %s", key.MountNsId, key.Id, err)
 			}
 		}
 	}
