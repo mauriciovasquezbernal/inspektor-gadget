@@ -46,7 +46,7 @@ func (g *GadgetDesc) ParamDescs() params.ParamDescs {
 	return params.ParamDescs{
 		{
 			Key:          ParamDNSTimeout,
-			Title:        "dnstimeout",
+			Title:        "dns-timeout",
 			DefaultValue: "10s",
 			Description:  "Timeout waiting for a response to a DNS query (used to calculate latency)",
 			TypeHint:     params.TypeDuration,
