@@ -327,7 +327,7 @@ func (t *Tracer) install() error {
 	// from the queries map (used to calculate DNS latency).
 	queryMap := t.Tracer.GetMap(BPFQueryMapName)
 	if queryMap == nil {
-		return fmt.Errorf("could not retrieve DNS query map")
+		return fmt.Errorf("got nil retrieving DNS query map")
 	}
 	t.gc = newGarbageCollector(queryMap)
 	t.gc.start()
