@@ -345,11 +345,11 @@ func (t *Tracer) Close() {
 		t.cancel()
 	}
 
-	if t.Tracer != nil {
-		t.Tracer.Close()
-	}
-
 	if t.gc != nil {
 		t.gc.stop()
+	}
+
+	if t.Tracer != nil {
+		t.Tracer.Close()
 	}
 }
