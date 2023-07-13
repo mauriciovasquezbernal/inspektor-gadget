@@ -21,9 +21,10 @@ import (
 	"time"
 
 	"github.com/cilium/ebpf"
+	log "github.com/sirupsen/logrus"
+
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/types"
-	log "github.com/sirupsen/logrus"
 )
 
 // Delay between each garbage collection run.
