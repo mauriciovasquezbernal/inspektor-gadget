@@ -19,12 +19,14 @@ package tracer
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/cilium/ebpf"
 
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
 
@@ -36,8 +38,13 @@ const garbageCollectorInterval = 1 * time.Second
 // are deleted from the map.
 //
 // The garbage collector goroutine terminates when the context is done.
-func startGarbageCollector(ctx context.Context, logger logger.Logger, queryMaxAge time.Duration, queryMap *ebpf.Map) {
-	logger.Debugf("starting garbage collection for DNS tracer with queryMaxAge %s", queryMaxAge)
+func startGarbageCollector(ctx context.Context, logger logger.Logger, gadgetParams *params.Params, queryMap *ebpf.Map) error {
+	dnsTimeout := gadgetParams.Get(ParamDNSTimeout).AsDuration()
+	if dnsTimeout <= 0 {
+		return fmt.Errorf("DNS timeout must be > 0")
+	}
+
+	logger.Debugf("starting garbage collection for DNS tracer with dnsTimeout %s", dnsTimeout)
 	go func() {
 		ticker := time.NewTicker(garbageCollectorInterval)
 		defer ticker.Stop()
@@ -50,19 +57,21 @@ func startGarbageCollector(ctx context.Context, logger logger.Logger, queryMaxAg
 
 			case <-ticker.C:
 				logger.Debugf("executing DNS query map garbage collection")
-				collectGarbage(logger, queryMaxAge, queryMap)
+				collectGarbage(logger, dnsTimeout, queryMap)
 			}
 		}
 	}()
+
+	return nil
 }
 
-func collectGarbage(logger logger.Logger, queryMaxAge time.Duration, queryMap *ebpf.Map) {
+func collectGarbage(logger logger.Logger, dnsTimeout time.Duration, queryMap *ebpf.Map) {
 	var (
 		key          dnsQueryKeyT
 		val          dnsQueryTsT
 		keysToDelete []dnsQueryKeyT
 	)
-	cutoffTs := types.Time(time.Now().Add(-1 * queryMaxAge).UnixNano())
+	cutoffTs := types.Time(time.Now().Add(-1 * dnsTimeout).UnixNano())
 	iter := queryMap.Iterate()
 
 	// If the BPF program is deleting keys from the map during iteration,
