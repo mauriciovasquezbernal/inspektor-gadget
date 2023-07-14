@@ -361,6 +361,9 @@ func (t *Tracer) Close() {
 		t.cancel()
 	}
 
+	// This should be called before we cleanup the BPF program since
+	// it reads from the query map. Otherwise it could output a
+	// "bad file descriptor" error after the map gets deleted.
 	if t.gc != nil {
 		t.gc.stop()
 	}

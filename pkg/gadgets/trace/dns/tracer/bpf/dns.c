@@ -237,10 +237,10 @@ output_dns_event(struct __sk_buff *skb, union dnsflags flags, __u32 name_len, __
 	// Filter by mount_ns_id and pkt_type to track the latency from when a query is sent from a container
 	// and when a response to the query is received by that same container.
 	//
-	// * On DNS query sent from a container namespace (mount_ns_id != 0, qr == 0, and pkt_type == OUTGOING),
+	// * On DNS query sent from a container namespace (mount_ns_id != 0, qr == DNS_QR_QUERY, and pkt_type == OUTGOING),
 	//   store the query timestamp in a map.
 	//
-	// * On DNS response received in the same container namespace (mount_ns_id != 0, qr == 1, and pkt_type == HOST)
+	// * On DNS response received in the same container namespace (mount_ns_id != 0, qr == DNS_QR_RESP, and pkt_type == HOST)
 	//   retrieve/delete the query timestamp and set the latency field on the event.
 	//
 	// A garbage collection thread running in userspace periodically scans for keys with old timestamps
