@@ -247,10 +247,10 @@ output_dns_event(struct __sk_buff *skb, union dnsflags flags, __u32 name_len, __
 	// to free space occupied by queries that never receive a response.
 	if (event->mount_ns_id) {
 		struct query_key_t query_key = {.mount_ns_id = event->mount_ns_id, .id = event->id};
-		if (event->qr == DNS_QR_QUERY && event->pkt_type == PACKET_OUTGOING) { // query with type PACKET_OUTGOING
+		if (event->qr == DNS_QR_QUERY && event->pkt_type == PACKET_OUTGOING) {
 			struct query_ts_t query_ts = {.timestamp = event->timestamp};
 			bpf_map_update_elem(&query_map, &query_key, &query_ts, BPF_NOEXIST);
-		} else if (event->qr == DNS_QR_RESP && event->pkt_type == PACKET_HOST) { // response with type PACKET_HOST
+		} else if (event->qr == DNS_QR_RESP && event->pkt_type == PACKET_HOST) {
 			struct query_ts_t *query_ts = bpf_map_lookup_elem(&query_map, &query_key);
 			if (query_ts != NULL) {
 				// query ts should always be less than the event ts, but check anyway to be safe.
