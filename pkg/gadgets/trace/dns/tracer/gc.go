@@ -73,15 +73,17 @@ func (gc *garbageCollector) stop() {
 }
 
 func (gc *garbageCollector) runLoop() {
+	ticker := time.NewTicker(garbageCollectorInterval)
+	defer ticker.Stop()
+
 	for {
 		select {
 		case <-gc.doneChan:
 			return
 
-		default:
+		case <-ticker.C:
 			gc.logger.Debugf("Executing DNS query map garbage collection")
 			gc.collect()
-			time.Sleep(garbageCollectorInterval)
 		}
 	}
 }
