@@ -37,7 +37,7 @@ const garbageCollectorInterval = 1 * time.Second
 //
 // The garbage collector goroutine terminates when the context is done.
 func startGarbageCollector(ctx context.Context, logger logger.Logger, queryMaxAge time.Duration, queryMap *ebpf.Map) {
-	logger.Debugf("Starting garbage collection for DNS tracer with queryMaxAge %s", queryMaxAge)
+	logger.Debugf("starting garbage collection for DNS tracer with queryMaxAge %s", queryMaxAge)
 	go func() {
 		ticker := time.NewTicker(garbageCollectorInterval)
 		defer ticker.Stop()
@@ -45,11 +45,11 @@ func startGarbageCollector(ctx context.Context, logger logger.Logger, queryMaxAg
 		for {
 			select {
 			case <-ctx.Done():
-				logger.Debugf("Stopping garbage collection for DNS tracer")
+				logger.Debugf("stopping garbage collection for DNS tracer")
 				return
 
 			case <-ticker.C:
-				logger.Debugf("Executing DNS query map garbage collection")
+				logger.Debugf("executing DNS query map garbage collection")
 				collectGarbage(logger, queryMaxAge, queryMap)
 			}
 		}
@@ -78,14 +78,14 @@ func collectGarbage(logger logger.Logger, queryMaxAge time.Duration, queryMap *e
 
 	if err := iter.Err(); err != nil {
 		if errors.Is(err, ebpf.ErrIterationAborted) {
-			logger.Warnf("Received ErrIterationAborted when iterating through DNS query map, possibly due to concurrent deletes. Some entries may be skipped this garbage collection cycle.")
+			logger.Warnf("received ErrIterationAborted when iterating through DNS query map, possibly due to concurrent deletes. Some entries may be skipped this garbage collection cycle.")
 		} else {
-			logger.Errorf("Received err %s when iterating through DNS query map", err)
+			logger.Errorf("received err %s when iterating through DNS query map", err)
 		}
 	}
 
 	for _, key := range keysToDelete {
-		logger.Debugf("Deleting key with mntNs=%d and DNS ID=%x from query map for DNS tracer", key.MountNsId, key.Id)
+		logger.Debugf("deleting key with mntNs=%d and DNS ID=%x from query map for DNS tracer", key.MountNsId, key.Id)
 		err := queryMap.Delete(key)
 		if err != nil {
 			if errors.Is(err, ebpf.ErrKeyNotExist) {
@@ -93,7 +93,7 @@ func collectGarbage(logger logger.Logger, queryMaxAge time.Duration, queryMap *e
 				// due to concurrent write operations.
 				logger.Debugf("ErrKeyNotExist when trying to delete DNS query timestamp with key mntNs=%d and DNS ID=%x", key.MountNsId, key.Id)
 			} else {
-				logger.Errorf("Could not delete DNS query timestamp with key mntNs=%d and DNS ID=%x, err: %s", key.MountNsId, key.Id, err)
+				logger.Errorf("could not delete DNS query timestamp with key mntNs=%d and DNS ID=%x, err: %s", key.MountNsId, key.Id, err)
 			}
 		}
 	}
