@@ -343,7 +343,7 @@ func (t *Tracer) startGarbageCollector(ctx context.Context, gadgetCtx gadgets.Ga
 
 	// Start a background thread to garbage collect queries without responses
 	// from the queries map (used to calculate DNS latency).
-	// The goroutine terminates when t.ctx is done.
+	// The goroutine terminates when ctx is done.
 	startGarbageCollector(ctx, gadgetCtx.Logger(), dnsTimeout, queryMap)
 
 	return nil
