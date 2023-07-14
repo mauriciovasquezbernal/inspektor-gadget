@@ -43,8 +43,6 @@ const (
 type Tracer struct {
 	*networktracer.Tracer[types.Event]
 
-	gc *garbageCollector
-
 	ctx    context.Context
 	cancel context.CancelFunc
 }
@@ -284,12 +282,12 @@ func (t *Tracer) Init(gadgetCtx gadgets.GadgetContext) error {
 		return fmt.Errorf("installing tracer: %w", err)
 	}
 
-	if err := t.startGarbageCollector(gadgetCtx); err != nil {
+	t.ctx, t.cancel = gadgetcontext.WithTimeoutOrCancel(gadgetCtx.Context(), gadgetCtx.Timeout())
+
+	if err := t.startGarbageCollector(t.ctx, gadgetCtx); err != nil {
 		t.Close()
 		return fmt.Errorf("starting garbage collector: %w", err)
 	}
-
-	t.ctx, t.cancel = gadgetcontext.WithTimeoutOrCancel(gadgetCtx.Context(), gadgetCtx.Timeout())
 
 	return nil
 }
@@ -332,7 +330,7 @@ func (t *Tracer) install() error {
 	return nil
 }
 
-func (t *Tracer) startGarbageCollector(gadgetCtx gadgets.GadgetContext) error {
+func (t *Tracer) startGarbageCollector(ctx context.Context, gadgetCtx gadgets.GadgetContext) error {
 	dnsTimeout := gadgetCtx.GadgetParams().Get(ParamDNSTimeout).AsDuration()
 	if dnsTimeout <= 0 {
 		return fmt.Errorf("DNS timeout must be > 0")
@@ -345,8 +343,8 @@ func (t *Tracer) startGarbageCollector(gadgetCtx gadgets.GadgetContext) error {
 
 	// Start a background thread to garbage collect queries without responses
 	// from the queries map (used to calculate DNS latency).
-	t.gc = newGarbageCollector(gadgetCtx, queryMap, dnsTimeout)
-	t.gc.start()
+	// The goroutine terminates when t.ctx is done.
+	startGarbageCollector(ctx, gadgetCtx.Logger(), dnsTimeout, queryMap)
 
 	return nil
 }
@@ -359,13 +357,6 @@ func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 func (t *Tracer) Close() {
 	if t.cancel != nil {
 		t.cancel()
-	}
-
-	// This should be called before we cleanup the BPF program since
-	// it reads from the query map. Otherwise it could output a
-	// "bad file descriptor" error after the map gets deleted.
-	if t.gc != nil {
-		t.gc.stop()
 	}
 
 	if t.Tracer != nil {
