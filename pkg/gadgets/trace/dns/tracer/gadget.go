@@ -22,6 +22,8 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/parser"
 )
 
+const ParamDNSTimeout = "dns-timeout"
+
 type GadgetDesc struct{}
 
 func (g *GadgetDesc) Name() string {
@@ -41,7 +43,15 @@ func (g *GadgetDesc) Description() string {
 }
 
 func (g *GadgetDesc) ParamDescs() params.ParamDescs {
-	return nil
+	return params.ParamDescs{
+		{
+			Key:          ParamDNSTimeout,
+			Title:        "dns-timeout",
+			DefaultValue: "10s",
+			Description:  "Timeout waiting for a response to a DNS query (used to calculate latency)",
+			TypeHint:     params.TypeDuration,
+		},
+	}
 }
 
 func (g *GadgetDesc) Parser() parser.Parser {
