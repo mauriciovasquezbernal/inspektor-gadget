@@ -55,8 +55,8 @@ func (g *GadgetDesc) Category() string {
 }
 
 func (g *GadgetDesc) Type() gadgets.GadgetType {
-	// Currently trace only
-	return gadgets.TypeTrace
+	// This is a like a super gadget that is capable of everything.
+	return gadgets.TypeRun
 }
 
 func (g *GadgetDesc) Description() string {
@@ -119,12 +119,45 @@ func getPrintMap(spec *ebpf.CollectionSpec) *ebpf.MapSpec {
 	return nil
 }
 
-func getEventTypeBTF(progContent []byte) (*btf.Struct, error) {
-	spec, err := loadSpec(progContent)
-	if err != nil {
-		return nil, err
+// getIterType looks for a variable declaration like
+// const struct myevent *gadget_iter_type __attribute__((unused)); in the eBPF code.
+// It's used to determine the type of the event the gadget produces.
+// If not such variable is found, it returns nil.
+func getIterType(spec *ebpf.CollectionSpec) *btf.Struct {
+	it := spec.Types.Iterate()
+	for it.Next() {
+		if v, ok := it.Type.(*btf.Var); ok {
+			if v.Name != gadgets.IterTypeVarName {
+				continue
+			}
+
+			p, ok := v.Type.(*btf.Pointer)
+			if !ok {
+				// TODO: warn/debug
+				continue
+			}
+
+			c, ok := p.Target.(*btf.Const)
+			if !ok {
+				// TODO: warn/debug
+				continue
+			}
+
+			s, ok := c.Type.(*btf.Struct)
+			if !ok {
+				// TODO: warn/debug
+				continue
+			}
+
+			return s
+		}
 	}
 
+	return nil
+}
+
+// getEventTypeBTF returns the btf.Struct defining the event the gadget produces.
+func getEventTypeBTF(spec *ebpf.CollectionSpec) (*btf.Struct, error) {
 	// Look for gadgets with a "print_" map
 	printMap := getPrintMap(spec)
 	if printMap != nil {
@@ -134,6 +167,11 @@ func getEventTypeBTF(progContent []byte) (*btf.Struct, error) {
 		}
 
 		return valueStruct, nil
+	}
+
+	iterType := getIterType(spec)
+	if iterType != nil {
+		return iterType, nil
 	}
 
 	return nil, fmt.Errorf("the gadget doesn't provide any compatible way to show information")
@@ -258,17 +296,31 @@ func addL4EndpointColumns(
 	})
 }
 
+func (g *GadgetDesc) getProgSpec(params *params.Params) (*ebpf.CollectionSpec, error) {
+	progContent := params.Get(ProgramContent).AsBytes()
+	spec, err := loadSpec(progContent)
+	if err != nil {
+		return nil, err
+	}
+	return spec, nil
+}
+
 func (g *GadgetDesc) getColumns(params *params.Params, args []string) (*columns.Columns[types.Event], error) {
 	if len(args) != 0 {
 		return nil, fmt.Errorf("no arguments expected: received %d", len(args))
 	}
-	progContent := params.Get(ProgramContent).AsBytes()
+
+	spec, err := g.getProgSpec(params)
+	if err != nil {
+		return nil, fmt.Errorf("getting prog spec: %w", err)
+	}
+
 	definitionBytes := params.Get(ParamDefinition).AsBytes()
 	if len(definitionBytes) == 0 {
 		return nil, fmt.Errorf("no definition provided")
 	}
 
-	valueStruct, err := getEventTypeBTF(progContent)
+	valueStruct, err := getEventTypeBTF(spec)
 	if err != nil {
 		return nil, fmt.Errorf("getting value struct: %w", err)
 	}
@@ -378,6 +430,23 @@ func (g *GadgetDesc) CustomParser(params *params.Params, args []string) (parser.
 	return parser.NewParser[types.Event](cols), nil
 }
 
+func (g *GadgetDesc) DynamicType(params *params.Params, args []string) (gadgets.GadgetType, error) {
+	spec, err := g.getProgSpec(params)
+	if err != nil {
+		return gadgets.TypeUnknown, fmt.Errorf("getting prog spec: %w", err)
+	}
+
+	if t := getPrintMap(spec); t != nil {
+		return gadgets.TypeTrace, nil
+	}
+
+	if t := getIterType(spec); t != nil {
+		return gadgets.TypeOneShot, nil
+	}
+
+	return gadgets.TypeUnknown, fmt.Errorf("unknown gadget type")
+}
+
 func (g *GadgetDesc) customJsonParser(params *params.Params, args []string, options ...columns_json.Option) (*columns_json.Formatter[types.Event], error) {
 	cols, err := g.getColumns(params, args)
 	if err != nil {
@@ -386,16 +455,26 @@ func (g *GadgetDesc) customJsonParser(params *params.Params, args []string, opti
 	return columns_json.NewFormatter(cols.ColumnMap, options...), nil
 }
 
+func jsonConverterFn(formatter *columns_json.Formatter[types.Event], printer gadgets.Printer) func(ev any) {
+	return func(ev any) {
+		switch typ := ev.(type) {
+		case *types.Event:
+			printer.Output(formatter.FormatEntry(typ))
+		case []*types.Event:
+			printer.Output(formatter.FormatEntries(typ))
+		default:
+			printer.Logf(logger.WarnLevel, "unknown type: %T", typ)
+		}
+	}
+}
+
 func (g *GadgetDesc) JSONConverter(params *params.Params, printer gadgets.Printer) func(ev any) {
 	formatter, err := g.customJsonParser(params, []string{})
 	if err != nil {
 		printer.Logf(logger.WarnLevel, "creating json formatter: %s", err)
 		return nil
 	}
-	return func(ev any) {
-		event := ev.(*types.Event)
-		printer.Output(formatter.FormatEntry(event))
-	}
+	return jsonConverterFn(formatter, printer)
 }
 
 func (g *GadgetDesc) JSONPrettyConverter(params *params.Params, printer gadgets.Printer) func(ev any) {
@@ -404,10 +483,7 @@ func (g *GadgetDesc) JSONPrettyConverter(params *params.Params, printer gadgets.
 		printer.Logf(logger.WarnLevel, "creating json formatter: %s", err)
 		return nil
 	}
-	return func(ev any) {
-		event := ev.(*types.Event)
-		printer.Output(formatter.FormatEntry(event))
-	}
+	return jsonConverterFn(formatter, printer)
 }
 
 func (g *GadgetDesc) YAMLConverter(params *params.Params, printer gadgets.Printer) func(ev any) {
@@ -417,8 +493,17 @@ func (g *GadgetDesc) YAMLConverter(params *params.Params, printer gadgets.Printe
 		return nil
 	}
 	return func(ev any) {
-		event := ev.(*types.Event)
-		eventJson := formatter.FormatEntry(event)
+		var eventJson string
+		switch typ := ev.(type) {
+		case *types.Event:
+			eventJson = formatter.FormatEntry(typ)
+		case []*types.Event:
+			eventJson = formatter.FormatEntries(typ)
+		default:
+			printer.Logf(logger.WarnLevel, "unknown type: %T", typ)
+			return
+		}
+
 		eventYaml, err := k8syaml.JSONToYAML([]byte(eventJson))
 		if err != nil {
 			printer.Logf(logger.WarnLevel, "converting json to yaml: %s", err)

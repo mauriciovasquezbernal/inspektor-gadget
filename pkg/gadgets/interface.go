@@ -24,15 +24,17 @@ import (
 type GadgetType string
 
 const (
+	TypeUnknown        GadgetType = "unknown"
 	TypeTrace          GadgetType = "trace"          // Normal trace gadgets
 	TypeTraceIntervals GadgetType = "traceIntervals" // top gadgets expecting arrays of events
 	TypeOneShot        GadgetType = "oneShot"        // Gadgets that only fetch results
 	TypeProfile        GadgetType = "profile"        // Gadgets that run until the user stops, or it times out and then shows results
+	TypeRun            GadgetType = "run"            // This is a special type only used by the run command
 	TypeOther          GadgetType = "other"
 )
 
 func (t GadgetType) CanSort() bool {
-	return t == TypeOneShot || t == TypeTraceIntervals
+	return t == TypeOneShot || t == TypeTraceIntervals || t == TypeRun
 }
 
 func (t GadgetType) IsPeriodic() bool {
@@ -109,6 +111,12 @@ type GadgetOutputFormats interface {
 // dependent on the parameters and arguments.
 type GadgetDescCustomParser interface {
 	CustomParser(*params.Params, []string) (parser.Parser, error)
+}
+
+// GadgetDescDynamicType can be implemented by the run gadget given that the type varies according
+// to the actually gadget being run.
+type GadgetDescDynamicType interface {
+	DynamicType(*params.Params, []string) (GadgetType, error)
 }
 
 // Printer is implemented by objects that can print information, like frontends.

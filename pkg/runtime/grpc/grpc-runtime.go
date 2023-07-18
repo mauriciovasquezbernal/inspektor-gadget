@@ -195,7 +195,15 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (runtime.CombinedGa
 		return nil, fmt.Errorf("get gadget pods: Inspektor Gadget is not running on the requested node(s): %v", nodes) //nolint:all
 	}
 
-	if gadgetCtx.GadgetDesc().Type() == gadgets.TypeTraceIntervals {
+	gadgetType := gadgetCtx.GadgetDesc().Type()
+	if c, ok := gadgetCtx.GadgetDesc().(gadgets.GadgetDescDynamicType); ok {
+		gadgetType, err = c.DynamicType(gadgetCtx.GadgetParams(), gadgetCtx.Args())
+		if err != nil {
+			return nil, fmt.Errorf("getting dynamic gadget type: %w", err)
+		}
+	}
+
+	if gadgetType == gadgets.TypeTraceIntervals {
 		gadgetCtx.Parser().EnableSnapshots(
 			gadgetCtx.Context(),
 			time.Duration(gadgetCtx.GadgetParams().Get(gadgets.ParamInterval).AsInt32())*time.Second,
@@ -204,7 +212,7 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (runtime.CombinedGa
 		defer gadgetCtx.Parser().Flush()
 	}
 
-	if gadgetCtx.GadgetDesc().Type() == gadgets.TypeOneShot {
+	if gadgetType == gadgets.TypeOneShot {
 		gadgetCtx.Parser().EnableCombiner()
 		defer gadgetCtx.Parser().Flush()
 	}

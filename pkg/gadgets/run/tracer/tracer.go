@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"strings"
@@ -34,11 +35,14 @@ import (
 	orascontent "oras.land/oras-go/pkg/content"
 	"oras.land/oras-go/pkg/oras"
 
+	containercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/container-collection"
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/internal/socketenricher"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/run/types"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/netnsenter"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
+	bpfiterns "github.com/inspektor-gadget/inspektor-gadget/pkg/utils/bpf-iter-ns"
 )
 
 // keep aligned with pkg/gadgets/common/types.h
@@ -61,9 +65,15 @@ type Config struct {
 	MountnsMap   *ebpf.Map
 }
 
+type linkIter struct {
+	link *link.Iter
+	typ  string
+}
+
 type Tracer struct {
-	config        *Config
-	eventCallback func(*types.Event)
+	config             *Config
+	eventCallback      func(*types.Event)
+	eventArrayCallback func([]*types.Event)
 
 	spec       *ebpf.CollectionSpec
 	collection *ebpf.Collection
@@ -77,11 +87,19 @@ type Tracer struct {
 	perfReader    *perf.Reader
 
 	links []link.Link
+
+	// Iterators related
+	linksIter []*linkIter
+
+	// containers
+	// TODO: do we need a lock?
+	containers map[string]*containercollection.Container
 }
 
 func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
 	tracer := &Tracer{
-		config: &Config{},
+		config:     &Config{},
+		containers: make(map[string]*containercollection.Container),
 	}
 	return tracer, nil
 }
@@ -164,6 +182,16 @@ func (t *Tracer) handlePrintMap() (*ebpf.MapSpec, error) {
 	return printMap, nil
 }
 
+func (t *Tracer) handleIter() error {
+	eventType := getIterType(t.spec)
+	if eventType == nil {
+		return nil
+	}
+
+	t.eventType = eventType
+	return nil
+}
+
 func (t *Tracer) installTracer() error {
 	// Load the spec
 	var err error
@@ -178,6 +206,10 @@ func (t *Tracer) installTracer() error {
 	printMap, err := t.handlePrintMap()
 	if err != nil {
 		return fmt.Errorf("handling print_ programs: %w", err)
+	}
+
+	if err := t.handleIter(); err != nil {
+		return fmt.Errorf("handling iterator programs: %w", err)
 	}
 
 	if t.eventType == nil {
@@ -254,6 +286,20 @@ func (t *Tracer) installTracer() error {
 				return fmt.Errorf("attach BPF program %q: %w", progName, err)
 			}
 			t.links = append(t.links, l)
+		} else if p.Type == ebpf.Tracing && strings.HasPrefix(p.SectionName, "iter/") {
+			switch p.AttachTo {
+			case "task", "tcp", "udp":
+				l, err := link.AttachIter(link.IterOptions{
+					Program: t.collection.Programs[progName],
+				})
+				if err != nil {
+					return fmt.Errorf("attach BPF program %q: %w", progName, err)
+				}
+				t.links = append(t.links, l)
+				t.linksIter = append(t.linksIter, &linkIter{link: l, typ: p.AttachTo})
+			default:
+				return fmt.Errorf("unsupported iter type %q", p.AttachTo)
+			}
 		}
 	}
 
@@ -441,6 +487,86 @@ func (t *Tracer) runPrint(gadgetCtx gadgets.GadgetContext) {
 	}
 }
 
+func (t *Tracer) runIterInAllNetNs(it *link.Iter, cb func([]byte) *types.Event) ([]*types.Event, error) {
+	events := []*types.Event{}
+	s := int(t.eventType.Size)
+
+	namespacesToVisit := map[uint64]*containercollection.Container{}
+	for _, c := range t.containers {
+		namespacesToVisit[c.Netns] = c
+	}
+
+	for _, container := range namespacesToVisit {
+		err := netnsenter.NetnsEnter(int(container.Pid), func() error {
+			reader, err := it.Open()
+			if err != nil {
+				return err
+			}
+			defer reader.Close()
+
+			buf, err := io.ReadAll(reader)
+			if err != nil {
+				return err
+			}
+
+			eventsLocal := splitAndConvert(buf, s, cb)
+			for _, ev := range eventsLocal {
+				// TODO: set all the values here to avoid depending on the enricher?
+				ev.NetNsID = container.Netns
+			}
+
+			events = append(events, eventsLocal...)
+
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return events, nil
+}
+
+func splitAndConvert(data []byte, size int, cb func([]byte) *types.Event) []*types.Event {
+	events := make([]*types.Event, len(data)/size)
+	for i := 0; i < len(data)/size; i++ {
+		ev := cb(data[i*size : (i+1)*size])
+		events[i] = ev
+	}
+	return events
+}
+
+func (t *Tracer) runIter(gadgetCtx gadgets.GadgetContext) error {
+	cb := t.processEventFunc(gadgetCtx)
+
+	events := []*types.Event{}
+
+	for _, l := range t.linksIter {
+		switch l.typ {
+		// Iterators that have to be run in the root pid namespace
+		case "task":
+			buf, err := bpfiterns.Read(l.link)
+			if err != nil {
+				return fmt.Errorf("reading iterator: %w", err)
+			}
+			eventsL := splitAndConvert(buf, int(t.eventType.Size), cb)
+			events = append(events, eventsL...)
+		// Iterators that have to be run on each network namespace
+		case "tcp", "udp":
+			var err error
+			eventsL, err := t.runIterInAllNetNs(l.link, cb)
+			if err != nil {
+				return fmt.Errorf("reading iterator: %w", err)
+			}
+			events = append(events, eventsL...)
+		}
+	}
+
+	t.eventArrayCallback(events)
+
+	return nil
+}
+
 func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 	params := gadgetCtx.GadgetParams()
 	if len(params.Get(ProgramContent).AsBytes()) != 0 {
@@ -469,6 +595,9 @@ func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 	if t.perfReader != nil || t.ringbufReader != nil {
 		go t.runPrint(gadgetCtx)
 	}
+	if len(t.linksIter) > 0 {
+		return t.runIter(gadgetCtx)
+	}
 	gadgetcontext.WaitForTimeoutOrDone(gadgetCtx)
 
 	return nil
@@ -484,4 +613,23 @@ func (t *Tracer) SetEventHandler(handler any) {
 		panic("event handler invalid")
 	}
 	t.eventCallback = nh
+}
+
+func (t *Tracer) SetEventHandlerArray(handler any) {
+	nh, ok := handler.(func(ev []*types.Event))
+	if !ok {
+		panic("event handler invalid")
+	}
+	t.eventArrayCallback = nh
+}
+
+func (t *Tracer) AttachContainer(container *containercollection.Container) error {
+	// TODO: should we use another ID?
+	t.containers[container.Runtime.ContainerID] = container
+	return nil
+}
+
+func (t *Tracer) DetachContainer(container *containercollection.Container) error {
+	delete(t.containers, container.Runtime.ContainerID)
+	return nil
 }

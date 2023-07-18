@@ -52,7 +52,7 @@ func GadgetParams(gadget GadgetDesc, parser parser.Parser) params.ParamDescs {
 		p.Add(IntervalParams()...)
 	}
 	if gadget.Type().CanSort() {
-		p.Add(SortableParams(gadget, parser)...)
+		p.Add(SortableParams(gadget)...)
 	}
 	return p
 }
@@ -69,11 +69,7 @@ func IntervalParams() params.ParamDescs {
 	}
 }
 
-func SortableParams(gadget GadgetDesc, parser parser.Parser) params.ParamDescs {
-	if parser == nil {
-		return nil
-	}
-
+func SortableParams(gadget GadgetDesc) params.ParamDescs {
 	var defaultSort []string
 	if sortInterface, ok := gadget.(DefaultSort); ok {
 		defaultSort = sortInterface.SortByDefault()
