@@ -54,7 +54,7 @@ struct socket_entry {
 };
 
 // Describes the type produced by the iterator program.
-GADGET_ITER_TYPE(socket_entry);
+GADGET_SNAPSHOTTER(socket_entry);
 
 /**
  * sock_i_ino - Returns the inode identifier associated to a socket.
