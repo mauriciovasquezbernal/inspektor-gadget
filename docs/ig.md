@@ -222,3 +222,29 @@ List of flags:
   `--auto-mount-filesystems` to ig to automatically mount those filesystems.
 - `--pid=host` runs in the host PID namespace. Optional on Linux. This is necessary on Docker Desktop on Windows because
   /host/proc does not give access to the host processes.
+
+### Using ig in a custom Kubernetes pod
+
+If you want to include `ig` in your own container images, you take example on the following Dockerfile:
+
+```Dockerfile
+# In production, you should use a specific version of ig instead of latest:
+# --build-arg BASE_IMAGE=ghcr.io/inspektor-gadget/ig:v0.18.1
+ARG BASE_IMAGE=ghcr.io/inspektor-gadget/ig:latest
+FROM ${BASE_IMAGE} as ig
+
+# Your own image
+FROM alpine:3.17
+COPY --from=ig /usr/bin/ig /usr/bin/ig
+ENV HOST_ROOT=/host
+# The rest of your Dockerfile
+```
+
+If you want to run `ig` in a Kubernetes pod, you can take example on
+[examples/ds-ig.yaml](examples/ds-ig.yaml):
+
+```bash
+$ kubectl apply -f docs/examples/ds-ig.yaml
+$ kubectl exec -ti $(kubectl get pod -o name -l name=example-ig | head -1) -- sh
+/ # ig trace exec
+```

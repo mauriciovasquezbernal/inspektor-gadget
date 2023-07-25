@@ -1,0 +1,57 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: ig
+  labels:
+    k8s-app: example-ig
+spec:
+  selector:
+    matchLabels:
+      name: example-ig
+  template:
+    metadata:
+      labels:
+        name: example-ig
+    spec:
+      containers:
+      - name: ig
+        # Replace this with your own image
+        image: alpine:3.17
+        securityContext:
+          privileged: true
+        # Replace this with your own commands
+        command:
+        - "/bin/sh"
+        - "-c"
+        - |
+          wget https://github.com/inspektor-gadget/inspektor-gadget/releases/download/v0.18.1/ig-linux-amd64-v0.18.1.tar.gz
+          tar -xzf ig-linux-amd64-v0.18.1.tar.gz ig
+          mv ig /bin/ig
+          sleep inf
+        env:
+        - name: HOST_ROOT
+          value: "/host"
+        volumeMounts:
+          - mountPath: /host
+            name: host
+          - mountPath: /run
+            name: run
+          - mountPath: /sys/kernel/debug
+            name: debugfs
+          - mountPath: /sys/fs/bpf
+            name: bpffs
+      nodeSelector:
+        kubernetes.io/os: linux
+      volumes:
+        - name: host
+          hostPath:
+            path: /
+        - name: run
+          hostPath:
+            path: /run
+        - name: bpffs
+          hostPath:
+            path: /sys/fs/bpf
+        - name: debugfs
+          hostPath:
+            path: /sys/kernel/debug
