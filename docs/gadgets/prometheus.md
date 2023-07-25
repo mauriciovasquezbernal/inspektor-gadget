@@ -23,7 +23,7 @@ file is:
 metrics_name: metrics_name
 metrics:
   - name: metric_name
-    type: counter or  gauge # histogram isnt' supported yet
+    type: counter or  gauge or histogram
     category: trace # category of the gadget to collect the metric. trace, snapshot, etc.
     gadget: exec # gadget used to collect the metric. exec, open, etc.
     selector:
@@ -192,6 +192,34 @@ metrics:
       - container
     selector:
       - "status:CLOSE_WAIT"
+```
+
+### Histograms
+
+"A _histogram_ samples observations (usually things like request durations or response sizes) and counts them in configurable buckets. It also provides a sum of all observed values." from [https://prometheus.io/docs/concepts/metric_types/#histogram](https://prometheus.io/docs/concepts/metric_types/#histogram). We support the same bucket configuration as described in
+[https://github.com/cloudflare/ebpf_exporter#histograms.](https://github.com/cloudflare/ebpf_exporter#histograms.)
+
+Right now only trace gadgets are supported.
+
+Example of histograms is:
+
+Latency of DNS requests for all pods
+
+```yaml
+metrics_name: metrics_name
+metrics:
+  - name: dns_requests_latency
+    type: histogram
+    category: trace
+    field: latency
+    bucket:
+      min: 0
+      max: 10
+      multiplier: 100000 # 0.1ms
+      type: exp2
+      unit: ns
+    selector:
+      - "qr:R" # Latency is only calculated for response events
 ```
 
 ### Guide
@@ -380,5 +408,4 @@ We can see how the counter for `mycontainer` is increased in http://localhost:90
 ### Limitations
 
 - The `kubectl gadget` instance has to keep running in order to update the metrics.
-- Histograms aren't supported
 - It's not possible to configure the metrics endpoint in ig-k8s
