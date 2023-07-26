@@ -35,7 +35,7 @@ type column[T any] struct {
 type Formatter[T any] struct {
 	options *Options
 	columns []*column[T]
-	printer func(entry *T, buf *encodeState)
+	printer func(indent string, entry *T, buf *encodeState)
 }
 
 // NewFormatter returns a Formatter that will turn entries of type T into JSON representation
@@ -131,12 +131,11 @@ func NewFormatter[T any](cols columns.ColumnMap[T], options ...Option) *Formatte
 	return tf
 }
 
-func (f *Formatter[T]) getPrinter(level int, cols []*column[T]) func(entry *T, buf *encodeState) {
-	indent := strings.Repeat("  ", level+1)
+func (f *Formatter[T]) getPrinter(level int, cols []*column[T]) func(indent string, entry *T, buf *encodeState) {
 	colsWithParent := map[string][]*column[T]{}
 	colsWithoutParent := []*column[T]{}
 
-	funcs := make([]func(entry *T, buf *encodeState), 0)
+	funcs := make([]func(indent string, entry *T, buf *encodeState), 0)
 
 	for _, col := range cols {
 		// Save columns which have a parent in its name
@@ -157,18 +156,18 @@ func (f *Formatter[T]) getPrinter(level int, cols []*column[T]) func(entry *T, b
 	// Better name?
 	handlePrefix := func() {
 		if !first {
-			funcs = append(funcs, func(entry *T, buf *encodeState) {
+			funcs = append(funcs, func(indent string, entry *T, buf *encodeState) {
 				buf.WriteByte(',')
 				if f.options.prettyPrint {
-					buf.WriteString("\n" + indent)
+					buf.WriteString("\n" + indent + "  ")
 				} else {
 					buf.WriteByte(' ')
 				}
 			})
 		} else {
 			if f.options.prettyPrint {
-				funcs = append(funcs, func(entry *T, buf *encodeState) {
-					buf.WriteString("\n" + indent)
+				funcs = append(funcs, func(indent string, entry *T, buf *encodeState) {
+					buf.WriteString("\n" + indent + "  ")
 				})
 			}
 			first = false
@@ -182,15 +181,15 @@ func (f *Formatter[T]) getPrinter(level int, cols []*column[T]) func(entry *T, b
 		parentName, _ := json.Marshal(strings.Split(key, ".")[0])
 
 		childFuncs := f.getPrinter(level+1, val)
-		funcs = append(funcs, func(entry *T, buf *encodeState) {
+		funcs = append(funcs, func(indent string, entry *T, buf *encodeState) {
 			buf.Write(parentName)
 			buf.WriteString(": {")
 
-			childFuncs(entry, buf)
+			childFuncs(indent+"  ", entry, buf)
 
 			// End parent
 			if f.options.prettyPrint {
-				buf.WriteString("\n" + indent + "}")
+				buf.WriteString("\n" + indent + "  }")
 			} else {
 				buf.WriteByte('}')
 			}
@@ -208,34 +207,73 @@ func (f *Formatter[T]) getPrinter(level int, cols []*column[T]) func(entry *T, b
 		}
 		handlePrefix()
 
-		funcs = append(funcs, func(entry *T, buf *encodeState) {
+		funcs = append(funcs, func(indent string, entry *T, buf *encodeState) {
 			col.formatter(buf, entry)
 		})
 	}
 
-	return func(entry *T, buf *encodeState) {
+	return func(indent string, entry *T, buf *encodeState) {
 		for _, f := range funcs {
-			f(entry, buf)
+			f(indent, entry, buf)
 		}
 	}
 }
 
+func (f *Formatter[T]) formatEntry(indent string, entry *T, buf *encodeState) {
+	if entry == nil {
+		buf.WriteString(indent + "{}")
+		return
+	}
+	buf.WriteString(indent + "{")
+	f.printer(indent, entry, buf)
+	if f.options.prettyPrint {
+		buf.WriteString("\n" + indent)
+	}
+	buf.WriteByte('}')
+}
+
 // FormatEntry returns an entry as a formatted string, respecting the given formatting settings
 func (f *Formatter[T]) FormatEntry(entry *T) string {
-	if entry == nil {
-		return ""
+	buf := bufpool.Get().(*encodeState)
+	buf.Reset()
+	defer bufpool.Put(buf)
+
+	f.formatEntry("", entry, buf)
+
+	return buf.String()
+}
+
+// FormatEntries returns a slice of entries as a formatted string, respecting the given formatting settings
+func (f *Formatter[T]) FormatEntries(entries []*T) string {
+	if len(entries) == 0 {
+		return "[]"
 	}
 
 	buf := bufpool.Get().(*encodeState)
 	buf.Reset()
 	defer bufpool.Put(buf)
 
-	buf.WriteByte('{')
-	f.printer(entry, buf)
-	if f.options.prettyPrint {
-		buf.WriteByte('\n')
+	if !f.options.prettyPrint {
+		buf.WriteByte('[')
+		for l, entry := range entries {
+			f.formatEntry("", entry, buf)
+			if l < len(entries)-1 {
+				buf.WriteString(", ")
+			}
+		}
+		buf.WriteByte(']')
+
+		return buf.String()
 	}
-	buf.WriteByte('}')
+
+	buf.WriteString("[\n")
+	for l, entry := range entries {
+		f.formatEntry("  ", entry, buf)
+		if l < len(entries)-1 {
+			buf.WriteString(",\n")
+		}
+	}
+	buf.WriteString("\n]")
 
 	return buf.String()
 }
