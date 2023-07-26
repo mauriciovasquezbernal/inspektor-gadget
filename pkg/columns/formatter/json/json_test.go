@@ -50,7 +50,7 @@ func TestJSONFormatter_FormatEntry(t *testing.T) {
 		`{"name": "Alice", "age": 32, "size": 1.74, "balance": 1000, "canDance": true}`,
 		`{"name": "Bob", "age": 26, "size": 1.73, "balance": -200, "canDance": true}`,
 		`{"name": "Eve", "age": 99, "size": 5.12, "balance": 1000000, "canDance": false}`,
-		``,
+		`{}`,
 	}
 	formatter := NewFormatter(testColumns)
 	for i, entry := range testEntries {
@@ -81,12 +81,49 @@ func TestJSONFormatter_PrettyFormatEntry(t *testing.T) {
   "balance": 1000000,
   "canDance": false
 }`,
-		``,
+		`{}`,
 	}
 	formatter := NewFormatter(testColumns, WithPrettyPrint())
 	for i, entry := range testEntries {
 		assert.Equal(t, expected[i], formatter.FormatEntry(entry))
 	}
+}
+
+func TestJSONFormatter_FormatEntries(t *testing.T) {
+	expected := `[{"name": "Alice", "age": 32, "size": 1.74, "balance": 1000, "canDance": true}, {"name": "Bob", "age": 26, "size": 1.73, "balance": -200, "canDance": true}, {"name": "Eve", "age": 99, "size": 5.12, "balance": 1000000, "canDance": false}, {}]`
+
+	formatter := NewFormatter(testColumns)
+	assert.Equal(t, expected, formatter.FormatEntries(testEntries))
+}
+
+func TestJSONFormatter_PrettyFormatEntries(t *testing.T) {
+	expected := `[
+  {
+    "name": "Alice",
+    "age": 32,
+    "size": 1.74,
+    "balance": 1000,
+    "canDance": true
+  },
+  {
+    "name": "Bob",
+    "age": 26,
+    "size": 1.73,
+    "balance": -200,
+    "canDance": true
+  },
+  {
+    "name": "Eve",
+    "age": 99,
+    "size": 5.12,
+    "balance": 1000000,
+    "canDance": false
+  },
+  {}
+]`
+
+	formatter := NewFormatter(testColumns, WithPrettyPrint())
+	assert.Equal(t, expected, formatter.FormatEntries(testEntries))
 }
 
 func BenchmarkFormatter(b *testing.B) {
