@@ -4,6 +4,7 @@ GADGETS = \
 	trace_tcpconnect_x86.bpf.o trace_tcpconnect_arm64.bpf.o \
 	trace_tcpretrans_x86.bpf.o trace_tcpretrans_arm64.bpf.o \
 	snapshot_process_x86.bpf.o snapshot_process_arm64.bpf.o \
+	snapshot_socket_x86.bpf.o snapshot_socket_arm64.bpf.o \
 	#
 
 .PHONY: all

@@ -1,0 +1,27 @@
+name: socket
+description: print sockets
+columns:
+  - name: src
+    min_width: 24
+    max_width: 50
+    order: 1000
+    visible: true
+  - name: dst
+    min_width: 24
+    max_width: 50
+    order: 1001
+    visible: true
+  - name: state
+    min_width: 10
+    max_width: 12
+    order: 1002
+    visible: true
+  - name: netns
+    template: ns
+    order: 1003
+    visible: false
+  - name: ino
+    min_width: 8
+    max_width: 12
+    order: 1004
+    visible: false
