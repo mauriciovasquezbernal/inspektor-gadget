@@ -100,7 +100,7 @@ static int probe_exit(struct pt_regs *ctx, short ver)
 		BPF_CORE_READ_BITFIELD_PROBED(sock, __sk_common.skc_reuseport);
 	event.opts = opts.data;
 	event.ts_us = bpf_ktime_get_ns() / 1000;
-	event.pid = pid;
+	event.pid =pid;
 	event.port = sport;
 	event.bound_dev_if = BPF_CORE_READ(sock, __sk_common.skc_bound_dev_if);
 	event.ret = ret;
