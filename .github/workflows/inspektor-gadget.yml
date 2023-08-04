@@ -116,6 +116,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
+      - name: Check ebpf formatting
+        run: |
+          sudo apt-get update && sudo apt-get install -y clang-format-15
+          make CLANG_FORMAT=clang-format-15 clang-format
+          changes="$(git status --porcelain)"
+          if [ -n "$changes" ] ; then
+            git diff
+            exit 1
+          fi
       - name: Detect changes for ebpf objects
         run: |
           make ebpf-objects
