@@ -33,8 +33,12 @@ import (
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 
+<<<<<<< HEAD
 	"github.com/inspektor-gadget/inspektor-gadget/builder"
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/common/utils"
+=======
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/oci_helper"
+>>>>>>> 327b8bbc... gadget/run: Implement pulling and running oci images
 )
 
 type BuildFile struct {
@@ -117,7 +121,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		progAmd64FilePath:  filepath.Join(tmpDir, "x86.bpf.o"),
 	}
 
-	ociStore, err := utils.GetLocalOciStore()
+	ociStore, err := oci_helper.GetLocalOciStore()
 	if err != nil {
 		return fmt.Errorf("get oci store: %w", err)
 	}
@@ -127,7 +131,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("create image index: %w", err)
 	}
 
-	targetImage, err := utils.NormalizeImage(imageIndexOpts.image)
+	targetImage, err := oci_helper.NormalizeImage(imageIndexOpts.image)
 	if err != nil {
 		return fmt.Errorf("normalize image: %w", err)
 	}
