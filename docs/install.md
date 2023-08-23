@@ -13,6 +13,7 @@ description: >
 - [Installing in the cluster](#installing-in-the-cluster)
   * [Quick installation](#quick-installation)
   * [Choosing the gadget image](#choosing-the-gadget-image)
+  * [Using the bcc image](#using-the-bcc-image)
   * [Hook Mode](#hook-mode)
   * [Specific Information for Different Platforms](#specific-information-for-different-platforms)
     + [Minikube](#minikube)
@@ -92,6 +93,20 @@ If you wish to install an alternative gadget image, you could use the following 
 $ kubectl gadget deploy --image=ghcr.io/myfork/inspektor-gadget:tag
 ```
 
+### Using the bcc image
+
+You can use the bcc image of Inspektor Gadget by using the `--bcc` flag:
+
+```bash
+$ kubectl gadget deploy --bcc
+```
+
+Note that, it will use the latest version of Inspektor Gadget.
+As a side effect, `CAP_SYS_MODULE` will be added as bcc gadgets may need it to
+load `kheaders.ko` in case this module is not built-in on target kernel.
+As a consequence, it is not possible to use the `bcc`flavor on [Talos](https://www.talos.dev/latest/learn-more/process-capabilities/)
+which forbids `CAP_SYS_MODULE`.
+
 ### Deploy to specific nodes
 
 The `--node-selector` flag accepts a [label
@@ -136,7 +151,7 @@ The different supported modes can be set by using the `hook-mode` option:
 - `fanotify+ebpf`:  Uses the Linux
   [fanotify](https://man7.org/linux/man-pages/man7/fanotify.7.html) API and an
   eBPF module. It works with both runc and crun. It works regardless of the
-  pid namespace configuration. 
+  pid namespace configuration.
 
 ### Specific Information for Different Platforms
 
