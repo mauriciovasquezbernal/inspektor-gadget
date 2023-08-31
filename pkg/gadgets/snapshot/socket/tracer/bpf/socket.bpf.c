@@ -7,9 +7,7 @@
  * https://github.com/torvalds/linux/blob/v5.13/tools/testing/selftests/bpf/progs/bpf_iter_tcp4.c
  */
 
-/*
- * This BPF program uses the GPL-restricted function bpf_seq_printf().
- */
+/* This BPF program uses the GPL-restricted function bpf_seq_write(). */
 
 #include <vmlinux/vmlinux.h>
 
@@ -123,8 +121,6 @@ socket_bpf_seq_write(struct seq_file *seq, __u16 family, __u16 proto,
 	bpf_seq_write(seq, &entry, sizeof(entry));
 }
 
-char _license[] SEC("license") = "GPL";
-
 static int dump_tcp_sock(struct seq_file *seq, struct tcp_sock *tp)
 {
 	struct inet_connection_sock *icsk = &tp->inet_conn;
@@ -228,3 +224,5 @@ int ig_snap_udp(struct bpf_iter__udp *ctx)
 
 	return 0;
 }
+
+char _license[] SEC("license") = "GPL";
