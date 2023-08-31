@@ -6,8 +6,7 @@
  * https://github.com/torvalds/linux/blob/v5.12/tools/testing/selftests/bpf/progs/bpf_iter_task.c
  */
 
-/* This BPF program uses the GPL-restricted function bpf_seq_printf().
- */
+/* This BPF program uses the GPL-restricted function bpf_seq_write(). */
 
 #include <vmlinux/vmlinux.h>
 #include <bpf/bpf_helpers.h>
@@ -33,8 +32,6 @@ SEC("iter/task")
 int ig_snap_proc(struct bpf_iter__task *ctx)
 {
 	struct seq_file *seq = ctx->meta->seq;
-	__u32 seq_num = ctx->meta->seq_num;
-	__u64 session_id = ctx->meta->session_id;
 	struct task_struct *task = ctx->task;
 	struct task_struct *parent;
 	pid_t parent_pid;
@@ -53,11 +50,7 @@ int ig_snap_proc(struct bpf_iter__task *ctx)
 		return 0;
 
 	parent = task->real_parent;
-	if (!parent)
-		parent_pid = -1;
-	else
-		parent_pid = parent->pid;
-
+	parent_pid = parent ? parent->pid : -1;
 	__u32 uid = task->cred->uid.val;
 	__u32 gid = task->cred->gid.val;
 
@@ -70,6 +63,7 @@ int ig_snap_proc(struct bpf_iter__task *ctx)
 	__builtin_memcpy(process.comm, task->comm, TASK_COMM_LEN);
 
 	bpf_seq_write(seq, &process, sizeof(process));
+
 	return 0;
 }
 
