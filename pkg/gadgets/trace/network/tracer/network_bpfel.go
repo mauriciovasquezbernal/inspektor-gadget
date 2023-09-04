@@ -96,8 +96,8 @@ type networkProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type networkMapSpecs struct {
-	Events  *ebpf.MapSpec `ebpf:"events"`
-	Sockets *ebpf.MapSpec `ebpf:"sockets"`
+	Events    *ebpf.MapSpec `ebpf:"events"`
+	IgSockets *ebpf.MapSpec `ebpf:"ig_sockets"`
 }
 
 // networkObjects contains all objects after they have been loaded into the kernel.
@@ -119,14 +119,14 @@ func (o *networkObjects) Close() error {
 //
 // It can be passed to loadNetworkObjects or ebpf.CollectionSpec.LoadAndAssign.
 type networkMaps struct {
-	Events  *ebpf.Map `ebpf:"events"`
-	Sockets *ebpf.Map `ebpf:"sockets"`
+	Events    *ebpf.Map `ebpf:"events"`
+	IgSockets *ebpf.Map `ebpf:"ig_sockets"`
 }
 
 func (m *networkMaps) Close() error {
 	return _NetworkClose(
 		m.Events,
-		m.Sockets,
+		m.IgSockets,
 	)
 }
 

@@ -116,10 +116,10 @@ type dnsProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type dnsMapSpecs struct {
-	Events   *ebpf.MapSpec `ebpf:"events"`
-	QueryMap *ebpf.MapSpec `ebpf:"query_map"`
-	Sockets  *ebpf.MapSpec `ebpf:"sockets"`
-	TmpEvent *ebpf.MapSpec `ebpf:"tmp_event"`
+	Events    *ebpf.MapSpec `ebpf:"events"`
+	IgSockets *ebpf.MapSpec `ebpf:"ig_sockets"`
+	QueryMap  *ebpf.MapSpec `ebpf:"query_map"`
+	TmpEvent  *ebpf.MapSpec `ebpf:"tmp_event"`
 }
 
 // dnsObjects contains all objects after they have been loaded into the kernel.
@@ -141,17 +141,17 @@ func (o *dnsObjects) Close() error {
 //
 // It can be passed to loadDnsObjects or ebpf.CollectionSpec.LoadAndAssign.
 type dnsMaps struct {
-	Events   *ebpf.Map `ebpf:"events"`
-	QueryMap *ebpf.Map `ebpf:"query_map"`
-	Sockets  *ebpf.Map `ebpf:"sockets"`
-	TmpEvent *ebpf.Map `ebpf:"tmp_event"`
+	Events    *ebpf.Map `ebpf:"events"`
+	IgSockets *ebpf.Map `ebpf:"ig_sockets"`
+	QueryMap  *ebpf.Map `ebpf:"query_map"`
+	TmpEvent  *ebpf.Map `ebpf:"tmp_event"`
 }
 
 func (m *dnsMaps) Close() error {
 	return _DnsClose(
 		m.Events,
+		m.IgSockets,
 		m.QueryMap,
-		m.Sockets,
 		m.TmpEvent,
 	)
 }

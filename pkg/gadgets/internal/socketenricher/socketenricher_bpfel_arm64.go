@@ -88,8 +88,8 @@ type socketenricherProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type socketenricherMapSpecs struct {
-	Sockets *ebpf.MapSpec `ebpf:"sockets"`
-	Start   *ebpf.MapSpec `ebpf:"start"`
+	IgSockets *ebpf.MapSpec `ebpf:"ig_sockets"`
+	Start     *ebpf.MapSpec `ebpf:"start"`
 }
 
 // socketenricherObjects contains all objects after they have been loaded into the kernel.
@@ -111,13 +111,13 @@ func (o *socketenricherObjects) Close() error {
 //
 // It can be passed to loadSocketenricherObjects or ebpf.CollectionSpec.LoadAndAssign.
 type socketenricherMaps struct {
-	Sockets *ebpf.Map `ebpf:"sockets"`
-	Start   *ebpf.Map `ebpf:"start"`
+	IgSockets *ebpf.Map `ebpf:"ig_sockets"`
+	Start     *ebpf.Map `ebpf:"start"`
 }
 
 func (m *socketenricherMaps) Close() error {
 	return _SocketenricherClose(
-		m.Sockets,
+		m.IgSockets,
 		m.Start,
 	)
 }
