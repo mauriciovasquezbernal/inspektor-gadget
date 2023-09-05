@@ -8,6 +8,10 @@
 ARG BUILDER_IMAGE=golang:1.19-bullseye
 ARG BASE_IMAGE=debian:bullseye-slim
 
+# bpftrace upstream image
+ARG BPFTRACE="ghcr.io/inspektor-gadget/bpftrace"
+
+FROM ${BPFTRACE} as bpftrace
 # Prepare and build gadget artifacts in a container
 FROM --platform=${BUILDPLATFORM} ${BUILDER_IMAGE} as builder
 
@@ -101,6 +105,8 @@ COPY gadget-container/hooks/nri/conf.json /opt/hooks/nri/
 
 # BTF files
 COPY hack/btfs /btfs/
+
+COPY --from=bpftrace /usr/bin/bpftrace /usr/bin/bpftrace
 
 # Mitigate https://github.com/kubernetes/kubernetes/issues/106962.
 RUN rm -f /var/run
