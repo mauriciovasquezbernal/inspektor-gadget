@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"reflect"
+	"runtime/debug"
 	"strings"
 	"unsafe"
 
@@ -209,6 +210,9 @@ func getSimpleType(typ btf.Type) reflect.Type {
 }
 
 func (g *GadgetDesc) getColumns(params *params.Params, args []string) (*columns.Columns[types.Event], error) {
+	fmt.Printf("getColumns\n")
+	debug.PrintStack()
+
 	progContent := params.Get(ProgramContent).AsBytes()
 	definitionBytes := params.Get(ParamDefinition).AsBytes()
 
@@ -316,7 +320,12 @@ func (g *GadgetDesc) getColumns(params *params.Params, args []string) (*columns.
 	return cols, nil
 }
 
-func (g *GadgetDesc) GetEbpfColAttrs() map[string]columns.Attributes {
+func (g *GadgetDesc) GetEbpfColAttrs(params *params.Params, args []string) map[string]columns.Attributes {
+	_, err := g.getColumns(params, args)
+	if err != nil {
+		panic(err)
+	}
+
 	return g.ebpfColAttrs
 }
 

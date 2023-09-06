@@ -28,14 +28,17 @@ import (
 
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/common/frontends"
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/common/frontends/console"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/columns"
 	cols "github.com/inspektor-gadget/inspektor-gadget/pkg/columns"
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	gadgetregistry "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-registry"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
+	runType "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/run/types"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/parser"
+	parserPkg "github.com/inspektor-gadget/inspektor-gadget/pkg/parser"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/runtime"
 )
 
@@ -237,12 +240,51 @@ func buildCommandFromGadget(
 			// the flags
 			checkVerboseFlag()
 
-			if c, ok := gadgetDesc.(gadgets.GadgetDescCustomParser); ok {
-				var err error
-				parser, err = c.CustomParser(gadgetParams, cmd.Flags().Args())
+			err := runtime.Init(runtimeGlobalParams)
+			if err != nil {
+				return fmt.Errorf("initializing runtime: %w", err)
+			}
+			defer runtime.Close()
+
+			// here init the gadget and get the columns (then build the parser with them!)
+			isRunGadget := gadgetDesc.Name() == "run"
+
+			if isRunGadget {
+				out, err := runtime.InitRunGadget(gadgetParams, args)
 				if err != nil {
-					return fmt.Errorf("calling custom parser: %w", err)
+					return fmt.Errorf("initializing run gadget: %w", err)
 				}
+
+				fmt.Printf("out is: %s\n", out)
+
+				ebpfColAttrs := make(map[string]columns.Attributes)
+				if err := json.Unmarshal([]byte(out), &ebpfColAttrs); err != nil {
+					return fmt.Errorf("error parsing column attributes: %w", err)
+				}
+
+				cols := runType.GetColumns()
+				for colName, colAttr := range ebpfColAttrs {
+					colName := colName
+					//ebpfColNames = append(ebpfColNames, colName)
+					cols.MustAddColumn(colAttr, func(ev *runType.Event) string {
+						ebpfVals, ok := ev.Data.(map[string]string)
+						if !ok {
+							fmt.Printf("error parsing column attributes: %v", err)
+							return ""
+						}
+						return ebpfVals[colName]
+					})
+				}
+
+				parser = parserPkg.NewParser[runType.Event](cols)
+
+				//if c, ok := gadgetDesc.(gadgets.GadgetDescCustomParser); ok {
+				//	var err error
+				//	parser, err = c.CustomParser(gadgetParams, cmd.Flags().Args())
+				//	if err != nil {
+				//		return fmt.Errorf("calling custom parser: %w", err)
+				//	}
+				//}
 			}
 
 			if parser != nil {
@@ -259,12 +301,6 @@ func buildCommandFromGadget(
 			if showHelp, _ := cmd.Flags().GetBool("help"); showHelp {
 				return cmd.Help()
 			}
-
-			err := runtime.Init(runtimeGlobalParams)
-			if err != nil {
-				return fmt.Errorf("initializing runtime: %w", err)
-			}
-			defer runtime.Close()
 
 			err = validOperators.Init(operatorsGlobalParamsCollection)
 			if err != nil {

@@ -34,16 +34,13 @@ import (
 
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/kubectl-gadget/utils"
 	"github.com/inspektor-gadget/inspektor-gadget/internal/deployinfo"
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/columns"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	runType "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/run/types"
 	pb "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgettracermanager/api"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
-	pkgParser "github.com/inspektor-gadget/inspektor-gadget/pkg/parser"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/runtime"
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
 
 const (
@@ -189,6 +186,48 @@ nodesLoop:
 	return res, nil
 }
 
+func (r *Runtime) InitRunGadget(gadgetParams *params.Params, args []string) (string, error) {
+	ctx, cancelDial := context.WithTimeout(context.Background(), time.Second*ConnectTimeout)
+	defer cancelDial()
+
+	// Get a random gadget pod and get the info from there
+	pods, err := getGadgetPods(ctx, []string{})
+	if err != nil {
+		return "", fmt.Errorf("get gadget pods: %w", err)
+	}
+	if len(pods) == 0 {
+		return "", fmt.Errorf("no valid pods found to get info from")
+	}
+
+	pod := pods[0]
+	dialOpt := grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
+		return NewK8SExecConn(ctx, pod, time.Second*ConnectTimeout)
+		// return NewK8SPortForwardConn(ctx, s, time.Second*30)
+	})
+
+	conn, err := grpc.DialContext(ctx, "", dialOpt, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	if err != nil {
+		return "", fmt.Errorf("dialing gadget pod on node %q: %w", pod.node, err)
+	}
+	client := pb.NewGadgetManagerClient(conn)
+	defer conn.Close()
+
+	allParams := make(map[string]string)
+	gadgetParams.CopyToMap(allParams, "")
+
+	in := &pb.InitRunGadgetRequest{
+		Params: allParams,
+		Args:   args,
+	}
+
+	out, err := client.InitRunGadget(ctx, in)
+	if err != nil {
+		return "", fmt.Errorf("get info from gadget pod: %w", err)
+	}
+
+	return out.Payload, nil
+}
+
 func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (runtime.CombinedGadgetResult, error) {
 	// Get nodes to run on
 	nodes := gadgetCtx.RuntimeParams().Get(ParamNode).AsStringSlice()
@@ -318,20 +357,20 @@ func (r *Runtime) runGadget(gadgetCtx runtime.GadgetContext, pod gadgetPod, allP
 	expectedSeq := uint32(1)
 
 	// TODO: cleanup, polish, find right place
-	isRunGadget := gadgetCtx.GadgetDesc().Name() == "run"
+	//isRunGadget := gadgetCtx.GadgetDesc().Name() == "run"
 
-	//var runParser func([]byte) error
-	var nodeEnricher func(any) error
-	var ebpfColNames []string
-	if isRunGadget {
-		ev := gadgetCtx.GadgetDesc().EventPrototype()
-		if _, ok := ev.(operators.NodeSetter); ok {
-			nodeEnricher = func(ev any) error {
-				ev.(operators.NodeSetter).SetNode(pod.node)
-				return nil
-			}
-		}
-	}
+	//	//var runParser func([]byte) error
+	//	var nodeEnricher func(any) error
+	//	var ebpfColNames []string
+	//	if isRunGadget {
+	//		ev := gadgetCtx.GadgetDesc().EventPrototype()
+	//		if _, ok := ev.(operators.NodeSetter); ok {
+	//			nodeEnricher = func(ev any) error {
+	//				ev.(operators.NodeSetter).SetNode(pod.node)
+	//				return nil
+	//			}
+	//		}
+	//	}
 	// fmt.Printf("\n\n\n")
 	// for key, val := range parser.GetColumns().(columns.ColumnMap[runtype.Event]) {
 	// 	fmt.Printf("%q: %+v", key, val)
@@ -359,33 +398,33 @@ func (r *Runtime) runGadget(gadgetCtx runtime.GadgetContext, pod gadgetPod, allP
 				return
 			}
 			switch ev.Type {
-			case pb.EventTypeColAttr:
-				ebpfColAttrs := make(map[string]columns.Attributes)
-				err := json.Unmarshal(ev.Payload, &ebpfColAttrs)
-				if err != nil {
-					gadgetCtx.Logger().Warnf("error parsing column attributes: %v", pod.node, err)
-					continue
-				}
-
-				cols := runType.GetColumns()
-				for colName, colAttr := range ebpfColAttrs {
-					colName := colName
-					ebpfColNames = append(ebpfColNames, colName)
-					cols.MustAddColumn(colAttr, func(ev *runType.Event) string {
-						ebpfVals, ok := ev.Data.(map[string]string)
-						if !ok {
-							gadgetCtx.Logger().Warnf("error parsing column attributes: %v", pod.node, err)
-							return ""
-						}
-						return ebpfVals[colName]
-					})
-				}
-
-				// Create right output formatter + print header
-				parser = pkgParser.NewParser(cols)
-				// TODO: handle options
-				parser.GetTextColumnsFormatter().FormatHeader()
-				fmt.Println(parser.GetTextColumnsFormatter().FormatHeader())
+			//			case pb.EventTypeColAttr:
+			//				ebpfColAttrs := make(map[string]columns.Attributes)
+			//				err := json.Unmarshal(ev.Payload, &ebpfColAttrs)
+			//				if err != nil {
+			//					gadgetCtx.Logger().Warnf("error parsing column attributes: %v", pod.node, err)
+			//					continue
+			//				}
+			//
+			//				cols := runType.GetColumns()
+			//				for colName, colAttr := range ebpfColAttrs {
+			//					colName := colName
+			//					ebpfColNames = append(ebpfColNames, colName)
+			//					cols.MustAddColumn(colAttr, func(ev *runType.Event) string {
+			//						ebpfVals, ok := ev.Data.(map[string]string)
+			//						if !ok {
+			//							gadgetCtx.Logger().Warnf("error parsing column attributes: %v", pod.node, err)
+			//							return ""
+			//						}
+			//						return ebpfVals[colName]
+			//					})
+			//				}
+			//
+			//				// Create right output formatter + print header
+			//				parser = pkgParser.NewParser(cols)
+			//				// TODO: handle options
+			//				parser.GetTextColumnsFormatter().FormatHeader()
+			//				fmt.Println(parser.GetTextColumnsFormatter().FormatHeader())
 			case pb.EventTypeGadgetPayload:
 				fallthrough
 			case pb.EventTypeRunGadget:
@@ -395,78 +434,84 @@ func (r *Runtime) runGadget(gadgetCtx runtime.GadgetContext, pod gadgetPod, allP
 				expectedSeq = ev.Seq + 1
 
 				if ev.Type == pb.EventTypeRunGadget {
+					//// TODO: move somewhere else
+					//jsonToBaseEventStruct := func(j []byte) (runType.Event, error) {
+					//	var eventHelper struct {
+					//		Runtime struct {
+					//			RuntimeName        string `json:"runtimeName"`
+					//			ContainerId        string `json:"containerId"`
+					//			ContainerName      string `json:"containerName"`
+					//			ContainerImageName string `json:"containerImageName"`
+					//		} `json:"runtime"`
+					//		Node        string    `json:"node"`
+					//		Namespace   string    `json:"namespace"`
+					//		Pod         string    `json:"pod"`
+					//		Container   string    `json:"container"`
+					//		Hostnetwork bool      `json:"hostnetwork"`
+					//		Timestamp   time.Time `json:"timestamp"`
+					//		Mntns       uint64    `json:"mntns"`
+					//	}
+					//
+					//	err := json.Unmarshal(j, &eventHelper)
+					//	if err != nil {
+					//		return runType.Event{}, err
+					//	}
+					//
+					//	var event runType.Event
+					//	event.Event.K8s.Node = eventHelper.Node
+					//	event.Event.K8s.Namespace = eventHelper.Namespace
+					//	event.Event.K8s.PodName = eventHelper.Pod
+					//	event.Event.K8s.ContainerName = eventHelper.Container
+					//	event.Event.K8s.HostNetwork = eventHelper.Hostnetwork
+					//
+					//	event.Event.Timestamp = types.TimeFromString(eventHelper.Timestamp.String())
+					//	event.MountNsID = eventHelper.Mntns
+					//
+					//	event.Event.Runtime.RuntimeName = types.RuntimeName(eventHelper.Runtime.RuntimeName)
+					//	event.Event.Runtime.ContainerID = eventHelper.Runtime.ContainerId
+					//	event.Event.Runtime.ContainerName = eventHelper.Runtime.ContainerName
+					//	event.Event.Runtime.ContainerImageName = eventHelper.Runtime.ContainerImageName
+					//
+					//	return event, nil
+					//}
+					//
+					//event, err := jsonToBaseEventStruct(ev.Payload)
+					//if err != nil {
+					//	gadgetCtx.Logger().Errorf("error parsing event: %v", err)
+					//	continue
+					//}
+					//if nodeEnricher != nil {
+					//	nodeEnricher(&event)
+					//}
+
+					var event runType.Event
+
+					//var jsonObj map[string]any
+					if err := json.Unmarshal(ev.Payload, &event.Data); err != nil {
+						fmt.Printf("error parsing event: %v", err)
+						return
+					}
+					//ebpfCols := make(map[string]string)
+					//for _, colName := range ebpfColNames {
+					//	ebpfCols[colName] = fmt.Sprint(jsonObj[colName])
+					//}
+					//event.Data = ebpfCols
+
 					// TODO: move somewhere else
-					jsonToBaseEventStruct := func(j []byte) (runType.Event, error) {
-						var eventHelper struct {
-							Runtime struct {
-								RuntimeName        string `json:"runtimeName"`
-								ContainerId        string `json:"containerId"`
-								ContainerName      string `json:"containerName"`
-								ContainerImageName string `json:"containerImageName"`
-							} `json:"runtime"`
-							Node        string    `json:"node"`
-							Namespace   string    `json:"namespace"`
-							Pod         string    `json:"pod"`
-							Container   string    `json:"container"`
-							Hostnetwork bool      `json:"hostnetwork"`
-							Timestamp   time.Time `json:"timestamp"`
-							Mntns       uint64    `json:"mntns"`
-						}
-
-						err := json.Unmarshal(j, &eventHelper)
-						if err != nil {
-							return runType.Event{}, err
-						}
-
-						var event runType.Event
-						event.Event.K8s.Node = eventHelper.Node
-						event.Event.K8s.Namespace = eventHelper.Namespace
-						event.Event.K8s.PodName = eventHelper.Pod
-						event.Event.K8s.ContainerName = eventHelper.Container
-						event.Event.K8s.HostNetwork = eventHelper.Hostnetwork
-
-						event.Event.Timestamp = types.TimeFromString(eventHelper.Timestamp.String())
-						event.MountNsID = eventHelper.Mntns
-
-						event.Event.Runtime.RuntimeName = types.RuntimeName(eventHelper.Runtime.RuntimeName)
-						event.Event.Runtime.ContainerID = eventHelper.Runtime.ContainerId
-						event.Event.Runtime.ContainerName = eventHelper.Runtime.ContainerName
-						event.Event.Runtime.ContainerImageName = eventHelper.Runtime.ContainerImageName
-
-						return event, nil
-					}
-
-					event, err := jsonToBaseEventStruct(ev.Payload)
-					if err != nil {
-						gadgetCtx.Logger().Errorf("error parsing event: %v", err)
-						continue
-					}
-					if nodeEnricher != nil {
-						nodeEnricher(&event)
-					}
-
-					var jsonObj map[string]any
-					json.Unmarshal(ev.Payload, &jsonObj)
-					ebpfCols := make(map[string]string)
-					for _, colName := range ebpfColNames {
-						ebpfCols[colName] = fmt.Sprint(jsonObj[colName])
-					}
-					event.Data = ebpfCols
-
-					// TODO: move somewhere else
-					formatter := parser.GetTextColumnsFormatter()
-					formatter.SetEventCallback(func(line string) {
-						fmt.Println(line)
-					})
-					parser.SetEventCallback(formatter.EventHandlerFunc())
-					parser.EventHandlerFunc().(func(*runType.Event))(&event)
-				} else {
-					if len(ev.Payload) > 0 && ev.Payload[0] == '[' {
-						jsonArrayHandler(ev.Payload)
-						continue
-					}
-					jsonHandler(ev.Payload)
+					//formatter := parser.GetTextColumnsFormatter()
+					//formatter.SetEventCallback(func(line string) {
+					//	fmt.Println(line)
+					//})
+					//parser.SetEventCallback(formatter.EventHandlerFunc())
+					//parser.EventHandlerFunc().(func(*runType.Event))(&event)
 				}
+
+				if len(ev.Payload) > 0 && ev.Payload[0] == '[' {
+					jsonArrayHandler(ev.Payload)
+					continue
+				}
+				jsonHandler(ev.Payload)
+
 			case pb.EventTypeGadgetResult:
 				gadgetCtx.Logger().Debugf("%-20s | got result from server", pod.node)
 				result = ev.Payload

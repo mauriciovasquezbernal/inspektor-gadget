@@ -80,6 +80,10 @@ func (r *Runtime) ParamDescs() params.ParamDescs {
 	return nil
 }
 
+func (r *Runtime) InitRunGadget(gadgetParams *params.Params, args []string) (string, error) {
+	return "", fmt.Errorf("not implemented")
+}
+
 func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext) (runtime.CombinedGadgetResult, error) {
 	log := gadgetCtx.Logger()
 

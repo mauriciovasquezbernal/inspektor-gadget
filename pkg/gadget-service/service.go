@@ -93,6 +93,34 @@ func (f *FooPrinter) Logf(severity logger.Level, fmtStr string, params ...any) {
 	f.log += fmt.Sprintf(fmtStr, params...)
 }
 
+func (s *Service) InitRunGadget(
+	ctx context.Context,
+	in *pb.InitRunGadgetRequest,
+) (*pb.InitRunGadgetResponse, error) {
+
+	gadgetDesc := gadgetregistry.Get(gadgets.CategoryNone, "run")
+	if gadgetDesc == nil {
+		return nil, fmt.Errorf("run gadget not found")
+	}
+
+	runDesc, ok := gadgetDesc.(*runTracer.GadgetDesc)
+	if !ok {
+		return nil, fmt.Errorf("expected runTracer.GadgetDesc, got %T", gadgetDesc)
+	}
+
+	// TODO: params and args
+	params := runDesc.ParamDescs().ToParams()
+	params.CopyFromMap(in.Params, "")
+	data, err := json.Marshal(runDesc.GetEbpfColAttrs(params, in.Args))
+	if err != nil {
+		return nil, fmt.Errorf("marshal ebpf collection attributes: %w", err)
+	}
+
+	return &pb.InitRunGadgetResponse{
+		Payload: string(data),
+	}, nil
+}
+
 func (s *Service) RunGadget(runGadget pb.GadgetManager_RunGadgetServer) error {
 	ctrl, err := runGadget.Recv()
 	if err != nil {
@@ -234,21 +262,21 @@ func (s *Service) RunGadget(runGadget pb.GadgetManager_RunGadgetServer) error {
 		return nil
 	}
 
-	if isRunGadget {
-		runDesc, ok := gadgetDesc.(*runTracer.GadgetDesc)
-		if !ok {
-			logger.Errorf("expected runTracer.GadgetDesc, got %T", gadgetDesc)
-		}
-		data, _ := json.Marshal(runDesc.GetEbpfColAttrs())
-		err := runGadget.Send(&pb.GadgetEvent{
-			Type:    pb.EventTypeColAttr,
-			Payload: data,
-		})
-		if err != nil {
-			logger.Warnf("sending column attributes: %v", err)
-			return nil
-		}
-	}
+	//	if isRunGadget {
+	//		runDesc, ok := gadgetDesc.(*runTracer.GadgetDesc)
+	//		if !ok {
+	//			logger.Errorf("expected runTracer.GadgetDesc, got %T", gadgetDesc)
+	//		}
+	//		data, _ := json.Marshal(runDesc.GetEbpfColAttrs())
+	//		err := runGadget.Send(&pb.GadgetEvent{
+	//			Type:    pb.EventTypeColAttr,
+	//			Payload: data,
+	//		})
+	//		if err != nil {
+	//			logger.Warnf("sending column attributes: %v", err)
+	//			return nil
+	//		}
+	//	}
 
 	// Create new Gadget Context
 	gadgetCtx := gadgetcontext.New(

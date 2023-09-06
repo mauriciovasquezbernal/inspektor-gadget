@@ -86,6 +86,8 @@ type Runtime interface {
 	Close() error
 	GlobalParamDescs() params.ParamDescs
 	ParamDescs() params.ParamDescs
+	// TODO: return propper type here!
+	InitRunGadget(*params.Params, []string) (string, error)
 	RunGadget(gadgetCtx GadgetContext) (CombinedGadgetResult, error)
 	GetCatalog() (*Catalog, error)
 	SetDefaultValue(params.ValueHint, string)

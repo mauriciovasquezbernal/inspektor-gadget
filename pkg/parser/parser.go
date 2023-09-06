@@ -303,6 +303,7 @@ func (p *parser[T]) JSONHandlerFunc(enrichers ...func(any) error) func([]byte) {
 		err := json.Unmarshal(event, ev)
 		if err != nil {
 			p.writeLogMessage(logger.WarnLevel, "unmarshalling: %s", err)
+			p.writeLogMessage(logger.WarnLevel, "event: %s", event)
 			return
 		}
 		handler(ev)

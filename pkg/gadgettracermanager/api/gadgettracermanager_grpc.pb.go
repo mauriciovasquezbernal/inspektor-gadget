@@ -247,6 +247,7 @@ var GadgetTracerManager_ServiceDesc = grpc.ServiceDesc{
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type GadgetManagerClient interface {
 	GetInfo(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error)
+	InitRunGadget(ctx context.Context, in *InitRunGadgetRequest, opts ...grpc.CallOption) (*InitRunGadgetResponse, error)
 	RunGadget(ctx context.Context, opts ...grpc.CallOption) (GadgetManager_RunGadgetClient, error)
 }
 
@@ -261,6 +262,15 @@ func NewGadgetManagerClient(cc grpc.ClientConnInterface) GadgetManagerClient {
 func (c *gadgetManagerClient) GetInfo(ctx context.Context, in *InfoRequest, opts ...grpc.CallOption) (*InfoResponse, error) {
 	out := new(InfoResponse)
 	err := c.cc.Invoke(ctx, "/gadgettracermanager.GadgetManager/GetInfo", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *gadgetManagerClient) InitRunGadget(ctx context.Context, in *InitRunGadgetRequest, opts ...grpc.CallOption) (*InitRunGadgetResponse, error) {
+	out := new(InitRunGadgetResponse)
+	err := c.cc.Invoke(ctx, "/gadgettracermanager.GadgetManager/InitRunGadget", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -303,6 +313,7 @@ func (x *gadgetManagerRunGadgetClient) Recv() (*GadgetEvent, error) {
 // for forward compatibility
 type GadgetManagerServer interface {
 	GetInfo(context.Context, *InfoRequest) (*InfoResponse, error)
+	InitRunGadget(context.Context, *InitRunGadgetRequest) (*InitRunGadgetResponse, error)
 	RunGadget(GadgetManager_RunGadgetServer) error
 	mustEmbedUnimplementedGadgetManagerServer()
 }
@@ -313,6 +324,9 @@ type UnimplementedGadgetManagerServer struct {
 
 func (UnimplementedGadgetManagerServer) GetInfo(context.Context, *InfoRequest) (*InfoResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetInfo not implemented")
+}
+func (UnimplementedGadgetManagerServer) InitRunGadget(context.Context, *InitRunGadgetRequest) (*InitRunGadgetResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method InitRunGadget not implemented")
 }
 func (UnimplementedGadgetManagerServer) RunGadget(GadgetManager_RunGadgetServer) error {
 	return status.Errorf(codes.Unimplemented, "method RunGadget not implemented")
@@ -344,6 +358,24 @@ func _GadgetManager_GetInfo_Handler(srv interface{}, ctx context.Context, dec fu
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(GadgetManagerServer).GetInfo(ctx, req.(*InfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _GadgetManager_InitRunGadget_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(InitRunGadgetRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(GadgetManagerServer).InitRunGadget(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/gadgettracermanager.GadgetManager/InitRunGadget",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(GadgetManagerServer).InitRunGadget(ctx, req.(*InitRunGadgetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -384,6 +416,10 @@ var GadgetManager_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetInfo",
 			Handler:    _GadgetManager_GetInfo_Handler,
+		},
+		{
+			MethodName: "InitRunGadget",
+			Handler:    _GadgetManager_InitRunGadget_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
