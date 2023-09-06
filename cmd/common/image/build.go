@@ -33,12 +33,8 @@ import (
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 
-<<<<<<< HEAD
 	"github.com/inspektor-gadget/inspektor-gadget/builder"
-	"github.com/inspektor-gadget/inspektor-gadget/cmd/common/utils"
-=======
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/oci_helper"
->>>>>>> 327b8bbc... gadget/run: Implement pulling and running oci images
 )
 
 type BuildFile struct {
