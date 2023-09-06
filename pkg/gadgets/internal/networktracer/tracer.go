@@ -36,6 +36,7 @@ import (
 )
 
 //go:generate bash -c "source ./clangosflags.sh; go run github.com/cilium/ebpf/cmd/bpf2go -target bpfel -cc clang dispatcher ./bpf/dispatcher.bpf.c -- $CLANG_OS_FLAGS -I./bpf/ -I../socketenricher/bpf"
+//go:generate bash -c "source ./clangosflags.sh; go run github.com/cilium/ebpf/cmd/bpf2go -target bpfel -cc clang dispatcherTailCallMap ./bpf/dispatcher-map.bpf.c -- $CLANG_OS_FLAGS -I./bpf/ -I../socketenricher/bpf"
 
 type attachment struct {
 	dispatcherObjs dispatcherObjects
@@ -51,10 +52,11 @@ type attachment struct {
 }
 
 type Tracer[Event any] struct {
-	socketEnricher *socketenricher.SocketEnricher
-	collection     *ebpf.Collection
-	prog           *ebpf.Program
-	perfRd         *perf.Reader
+	socketEnricher            *socketenricher.SocketEnricher
+	dispatcherTailCallMapObjs dispatcherTailCallMapObjects
+	collection                *ebpf.Collection
+	prog                      *ebpf.Program
+	perfRd                    *perf.Reader
 
 	// key: network namespace inode number
 	// value: Tracelet
@@ -94,13 +96,11 @@ func (t *Tracer[Event]) newAttachment(
 	if err := dispatcherSpec.RewriteConstants(consts); err != nil {
 		return nil, fmt.Errorf("RewriteConstants while attaching to pid %d: %w", pid, err)
 	}
-	dispatcherSpec.Maps["tail_call"].Contents = []ebpf.MapKV{
-		{
-			Key:   uint32(0),
-			Value: uint32(t.prog.FD()),
+	opts := ebpf.CollectionOptions{
+		MapReplacements: map[string]*ebpf.Map{
+			"tail_call": t.dispatcherTailCallMapObjs.TailCall,
 		},
 	}
-	opts := ebpf.CollectionOptions{}
 	if err = dispatcherSpec.LoadAndAssign(&a.dispatcherObjs, &opts); err != nil {
 		return nil, fmt.Errorf("loading ebpf program: %w", err)
 	}
@@ -117,17 +117,29 @@ func (t *Tracer[Event]) newAttachment(
 }
 
 func NewTracer[Event any](
-	spec *ebpf.CollectionSpec,
 	baseEvent func(ev types.Event) *Event,
 	processEvent func(rawSample []byte, netns uint64) (*Event, error),
 ) (_ *Tracer[Event], err error) {
-	gadgets.FixBpfKtimeGetBootNs(spec.Programs)
-
 	t := &Tracer[Event]{
 		attachments:  make(map[uint64]*attachment),
 		baseEvent:    baseEvent,
 		processEvent: processEvent,
 	}
+
+	dispatcherTailCallMapSpec, err := loadDispatcherTailCallMap()
+	if err != nil {
+		return nil, err
+	}
+	var opts ebpf.CollectionOptions
+	if err = dispatcherTailCallMapSpec.LoadAndAssign(&t.dispatcherTailCallMapObjs, &opts); err != nil {
+		return nil, fmt.Errorf("loading ebpf program: %w", err)
+	}
+
+	return t, nil
+}
+
+func (t *Tracer[Event]) Run(spec *ebpf.CollectionSpec) (err error) {
+	gadgets.FixBpfKtimeGetBootNs(spec.Programs)
 
 	defer func() {
 		if err != nil {
@@ -162,13 +174,13 @@ func NewTracer[Event any](
 	for progName, p := range spec.Programs {
 		if p.Type == ebpf.SocketFilter && strings.HasPrefix(p.SectionName, "socket") {
 			if bpfProgName != "" {
-				return nil, fmt.Errorf("multiple socket programs found: %s, %s", bpfProgName, progName)
+				return fmt.Errorf("multiple socket programs found: %s, %s", bpfProgName, progName)
 			}
 			bpfProgName = progName
 		}
 	}
 	if bpfProgName == "" {
-		return nil, fmt.Errorf("no socket program found")
+		return fmt.Errorf("no socket program found")
 	}
 
 	// Automatically find the perf map
@@ -176,13 +188,13 @@ func NewTracer[Event any](
 	for mapName, m := range spec.Maps {
 		if m.Type == ebpf.PerfEventArray {
 			if bpfPerfMapName != "" {
-				return nil, fmt.Errorf("multiple perf maps found: %s, %s", bpfPerfMapName, mapName)
+				return fmt.Errorf("multiple perf maps found: %s, %s", bpfPerfMapName, mapName)
 			}
 			bpfPerfMapName = mapName
 		}
 	}
 	if bpfPerfMapName == "" {
-		return nil, fmt.Errorf("no perf map found")
+		return fmt.Errorf("no perf map found")
 	}
 
 	if t.socketEnricher != nil {
@@ -193,21 +205,31 @@ func NewTracer[Event any](
 
 	t.collection, err = ebpf.NewCollectionWithOptions(spec, opts)
 	if err != nil {
-		return nil, fmt.Errorf("creating BPF collection: %w", err)
+		return fmt.Errorf("creating BPF collection: %w", err)
 	}
 
 	t.perfRd, err = perf.NewReader(t.collection.Maps[bpfPerfMapName], gadgets.PerfBufferPages*os.Getpagesize())
 	if err != nil {
-		return nil, fmt.Errorf("getting a perf reader: %w", err)
+		return fmt.Errorf("getting a perf reader: %w", err)
 	}
 
 	var ok bool
 	t.prog, ok = t.collection.Programs[bpfProgName]
 	if !ok {
-		return nil, fmt.Errorf("BPF program %q not found", bpfProgName)
+		return fmt.Errorf("BPF program %q not found", bpfProgName)
 	}
 
-	return t, nil
+	err = t.AttachProg(t.prog)
+	if err != nil {
+		return fmt.Errorf("updating tail call map: %w", err)
+	}
+
+	return nil
+}
+
+// AttachProg is used directly by containerized gadgets
+func (t *Tracer[Event]) AttachProg(prog *ebpf.Program) error {
+	return t.dispatcherTailCallMapObjs.TailCall.Update(uint32(0), uint32(prog.FD()), ebpf.UpdateAny)
 }
 
 func (t *Tracer[Event]) Attach(pid uint32) error {
@@ -239,7 +261,6 @@ func (t *Tracer[Event]) SetEventHandler(handler any) {
 		panic("event handler invalid")
 	}
 	t.eventHandler = nh
-	go t.listen(t.perfRd, t.baseEvent, t.processEvent, t.eventHandler)
 }
 
 // EventCallback provides support for legacy pkg/gadget-collection
@@ -255,10 +276,18 @@ func (t *Tracer[Event]) EventCallback(event any) {
 }
 
 func (t *Tracer[Event]) AttachContainer(container *containercollection.Container) error {
+	// FIXME: AttachContainer called before t.Tracer is initialized
+	if t == nil {
+		return nil
+	}
 	return t.Attach(container.Pid)
 }
 
 func (t *Tracer[Event]) DetachContainer(container *containercollection.Container) error {
+	// FIXME
+	if t == nil {
+		return nil
+	}
 	return t.Detach(container.Pid)
 }
 
@@ -266,46 +295,45 @@ func (t *Tracer[Event]) GetMap(name string) *ebpf.Map {
 	return t.collection.Maps[name]
 }
 
-func (t *Tracer[Event]) listen(
-	rd *perf.Reader,
-	baseEvent func(ev types.Event) *Event,
-	processEvent func(rawSample []byte, netns uint64) (*Event, error),
-	eventCallback func(*Event),
-) {
+func (t *Tracer[Event]) Listen() {
+	go t.listen()
+}
+
+func (t *Tracer[Event]) listen() {
 	for {
-		record, err := rd.Read()
+		record, err := t.perfRd.Read()
 		if err != nil {
 			if errors.Is(err, perf.ErrClosed) {
 				return
 			}
 
 			msg := fmt.Sprintf("Error reading perf ring buffer: %s", err)
-			eventCallback(baseEvent(types.Err(msg)))
+			t.eventHandler(t.baseEvent(types.Err(msg)))
 			return
 		}
 
 		if record.LostSamples != 0 {
 			msg := fmt.Sprintf("lost %d samples", record.LostSamples)
-			eventCallback(baseEvent(types.Warn(msg)))
+			t.eventHandler(t.baseEvent(types.Warn(msg)))
 			continue
 		}
 
 		if len(record.RawSample) < 4 {
-			eventCallback(baseEvent(types.Err("record too small")))
+			t.eventHandler(t.baseEvent(types.Err("record too small")))
 			continue
 		}
 
 		// all networking gadgets have netns as first field
 		netns := *(*uint32)(unsafe.Pointer(&record.RawSample[0]))
-		event, err := processEvent(record.RawSample, uint64(netns))
+		event, err := t.processEvent(record.RawSample, uint64(netns))
 		if err != nil {
-			eventCallback(baseEvent(types.Err(err.Error())))
+			t.eventHandler(t.baseEvent(types.Err(err.Error())))
 			continue
 		}
 		if event == nil {
 			continue
 		}
-		eventCallback(event)
+		t.eventHandler(event)
 	}
 }
 

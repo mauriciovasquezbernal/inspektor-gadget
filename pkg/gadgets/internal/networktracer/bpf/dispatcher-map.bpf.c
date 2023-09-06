@@ -6,16 +6,4 @@
 
 #include "dispatcher-map.h"
 
-const volatile __u32 current_netns = 0;
-
-SEC("socket1")
-int ig_net_disp(struct __sk_buff *skb)
-{
-	skb->cb[0] = current_netns;
-
-	bpf_tail_call(skb, &tail_call, 0);
-
-	return 0;
-}
-
 char _license[] SEC("license") = "GPL";

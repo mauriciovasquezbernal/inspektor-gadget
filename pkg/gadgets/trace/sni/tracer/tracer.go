@@ -108,13 +108,17 @@ func (t *Tracer) install() error {
 	}
 
 	networkTracer, err := networktracer.NewTracer(
-		spec,
 		types.Base,
 		parseSNIEvent,
 	)
 	if err != nil {
 		return fmt.Errorf("creating network tracer: %w", err)
 	}
+	err = networkTracer.Run(spec)
+	if err != nil {
+		return fmt.Errorf("setting network tracer spec: %w", err)
+	}
+	networkTracer.Listen()
 	t.Tracer = networkTracer
 	return nil
 }

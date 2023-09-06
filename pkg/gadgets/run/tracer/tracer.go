@@ -36,6 +36,7 @@ import (
 
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/internal/networktracer"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/internal/socketenricher"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/run/types"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
@@ -62,6 +63,8 @@ type Config struct {
 }
 
 type Tracer struct {
+	*networktracer.Tracer[types.Event]
+
 	config        *Config
 	eventCallback func(*types.Event)
 
@@ -75,12 +78,26 @@ type Tracer struct {
 	perfReader        *perf.Reader
 	printMapValueSize uint32
 
+	useAttacherInterface bool
+
 	links []link.Link
 }
 
 func (g *GadgetDesc) NewInstance() (gadgets.Gadget, error) {
+	networkTracer, err := networktracer.NewTracer(
+		types.Base,
+		func(rawSample []byte, netns uint64) (*types.Event, error) {
+			fmt.Printf("rawSample: %v, netns=%d\n", rawSample, netns)
+			return &types.Event{}, nil
+		},
+	)
+	if err != nil {
+		return nil, fmt.Errorf("creating network tracer: %w", err)
+	}
+
 	tracer := &Tracer{
 		config: &Config{},
+		Tracer: networkTracer,
 	}
 	return tracer, nil
 }
@@ -236,6 +253,15 @@ func (t *Tracer) installTracer() error {
 				return fmt.Errorf("attach BPF program %q: %w", progName, err)
 			}
 			t.links = append(t.links, l)
+		} else if p.Type == ebpf.SocketFilter && strings.HasPrefix(p.SectionName, "socket") {
+			if t.useAttacherInterface {
+				return fmt.Errorf("several socket filters found, only one is supported")
+			}
+			t.useAttacherInterface = true
+			err := t.Tracer.AttachProg(t.collection.Programs[progName])
+			if err != nil {
+				return fmt.Errorf("attaching ebpf program to dispatcher: %w", err)
+			}
 		}
 	}
 
@@ -464,4 +490,8 @@ func (t *Tracer) SetEventHandler(handler any) {
 		panic("event handler invalid")
 	}
 	t.eventCallback = nh
+
+	if t.Tracer != nil {
+		t.Tracer.SetEventHandler(handler)
+	}
 }
