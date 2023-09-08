@@ -22,14 +22,18 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 
+	"github.com/inspektor-gadget/inspektor-gadget/builder"
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/common/utils"
 )
 
@@ -48,11 +52,16 @@ func NewBuildCmd() *cobra.Command {
 		RunE:         runBuild,
 	}
 
-	cmd.Flags().String("prog-amd64", "", "path to the amd64 variant of the eBPF program")
-	cmd.Flags().String("prog-arm64", "", "path to the arm64 variant of the eBPF program")
-	cmd.Flags().String("definition", "", "path to the definition file")
+	// TODO: support custom path to build.yaml
 
 	return cmd
+}
+
+// TODO: name clash with buildOptions
+type BuildConf struct {
+	Program    string `yaml:"program"`
+	Definition string `yaml:"definition"`
+	// TODO: author, etc.
 }
 
 func runBuild(cmd *cobra.Command, args []string) error {
@@ -60,15 +69,37 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("expected exactly one unnamed argument")
 	}
 	o := &buildOptions{
-		progAmd64FilePath:  cmd.Flag("prog-amd64").Value.String(),
-		progArm64FilePath:  cmd.Flag("prog-arm64").Value.String(),
-		definitionFilePath: cmd.Flag("definition").Value.String(),
-		image:              args[0],
+		image: args[0],
 	}
 
-	if o.progArm64FilePath == "" && o.progAmd64FilePath == "" {
-		return fmt.Errorf("at least one of --prog-amd64 or --prog-arm64 must be specified")
+	b, err := os.ReadFile("build.yaml")
+	if err != nil {
+		return fmt.Errorf("read build.yaml: %w", err)
 	}
+	conf := &BuildConf{}
+	if err := yaml.Unmarshal(b, conf); err != nil {
+		return fmt.Errorf("unmarshal build.yaml: %w", err)
+	}
+
+	// make a temp folder to store the build results
+	tmpDir, err := os.MkdirTemp("", "gadget-build")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	buildScript := builder.GetBuildScript()
+
+	// TODO: Why is "" needed?
+	buildCmd := exec.Command("/bin/sh", "-c", string(buildScript), "", conf.Program, tmpDir)
+	out, err := buildCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("build script: %w: %q", err, out)
+	}
+
+	o.definitionFilePath = conf.Definition
+	o.progArm64FilePath = filepath.Join(tmpDir, "/", "arm64.bpf.o")
+	o.progAmd64FilePath = filepath.Join(tmpDir, "/", "x86.bpf.o")
 
 	ociStore, err := utils.GetLocalOciStore()
 	if err != nil {
