@@ -71,11 +71,11 @@ type attachment struct {
 }
 
 type Tracer[Event any] struct {
-	socketEnricher            *socketenricher.SocketEnricher
-	dispatcherTailCallMapObjs dispatcherTailCallMapObjects
-	collection                *ebpf.Collection
-	prog                      *ebpf.Program
-	perfRd                    *perf.Reader
+	socketEnricher *socketenricher.SocketEnricher
+	dispatcherMap  *ebpf.Map
+	collection     *ebpf.Collection
+	prog           *ebpf.Program
+	perfRd         *perf.Reader
 
 	// key: network namespace inode number
 	// value: Tracelet
@@ -117,7 +117,7 @@ func (t *Tracer[Event]) newAttachment(
 	}
 	opts := ebpf.CollectionOptions{
 		MapReplacements: map[string]*ebpf.Map{
-			"tail_call": t.dispatcherTailCallMapObjs.TailCall,
+			"tail_call": t.dispatcherMap,
 		},
 	}
 	if err = dispatcherSpec.LoadAndAssign(&a.dispatcherObjs, &opts); err != nil {
@@ -145,13 +145,17 @@ func NewTracer[Event any](
 		processEvent: processEvent,
 	}
 
-	dispatcherTailCallMapSpec, err := loadDispatcherTailCallMap()
-	if err != nil {
-		return nil, err
+	mapSpec := ebpf.MapSpec{
+		Name:       "tail_call",
+		Type:       ebpf.ProgramArray,
+		KeySize:    4,
+		ValueSize:  4,
+		MaxEntries: 1,
 	}
-	var opts ebpf.CollectionOptions
-	if err = dispatcherTailCallMapSpec.LoadAndAssign(&t.dispatcherTailCallMapObjs, &opts); err != nil {
-		return nil, fmt.Errorf("loading ebpf program: %w", err)
+
+	t.dispatcherMap, err = ebpf.NewMap(&mapSpec)
+	if err != nil {
+		return nil, fmt.Errorf("creating tail_call map: %w", err)
 	}
 
 	return t, nil
@@ -248,7 +252,7 @@ func (t *Tracer[Event]) Run(spec *ebpf.CollectionSpec) (err error) {
 
 // AttachProg is used directly by containerized gadgets
 func (t *Tracer[Event]) AttachProg(prog *ebpf.Program) error {
-	return t.dispatcherTailCallMapObjs.TailCall.Update(uint32(0), uint32(prog.FD()), ebpf.UpdateAny)
+	return t.dispatcherMap.Update(uint32(0), uint32(prog.FD()), ebpf.UpdateAny)
 }
 
 func (t *Tracer[Event]) Attach(pid uint32) error {
@@ -387,5 +391,8 @@ func (t *Tracer[Event]) Close() {
 	}
 	if t.socketEnricher != nil {
 		t.socketEnricher.Close()
+	}
+	if t.dispatcherMap != nil {
+		t.dispatcherMap.Close()
 	}
 }
