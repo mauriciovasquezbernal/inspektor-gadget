@@ -22,22 +22,27 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
 
+	"github.com/inspektor-gadget/inspektor-gadget/builder"
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/common/utils"
 )
 
-type buildOptions struct {
-	progAmd64FilePath  string
-	progArm64FilePath  string
-	definitionFilePath string
-	image              string
+type BuildFile struct {
+	EBPFProgram string `yaml:"ebpfprogram"`
+	Definition  string `yaml:"definition"`
+	CFlags      string `yaml:"cflags"`
+	// TODO: custom build script
+	// TODO: author, etc.
 }
 
 func NewBuildCmd() *cobra.Command {
@@ -48,26 +53,68 @@ func NewBuildCmd() *cobra.Command {
 		RunE:         runBuild,
 	}
 
-	cmd.Flags().String("prog-amd64", "", "path to the amd64 variant of the eBPF program")
-	cmd.Flags().String("prog-arm64", "", "path to the arm64 variant of the eBPF program")
-	cmd.Flags().String("definition", "", "path to the definition file")
+	cmd.Flags().StringP("file", "f", "build.yaml", "path to build.yaml")
 
 	return cmd
+}
+
+type imageIndexOpts struct {
+	progAmd64FilePath  string
+	progArm64FilePath  string
+	definitionFilePath string
+	image              string
 }
 
 func runBuild(cmd *cobra.Command, args []string) error {
 	if len(args) != 1 {
 		return fmt.Errorf("expected exactly one unnamed argument")
 	}
-	o := &buildOptions{
-		progAmd64FilePath:  cmd.Flag("prog-amd64").Value.String(),
-		progArm64FilePath:  cmd.Flag("prog-arm64").Value.String(),
-		definitionFilePath: cmd.Flag("definition").Value.String(),
-		image:              args[0],
+
+	conf := &BuildFile{
+		EBPFProgram: "program.bpf.c",
+		Definition:  "definition.yaml",
 	}
 
-	if o.progArm64FilePath == "" && o.progAmd64FilePath == "" {
-		return fmt.Errorf("at least one of --prog-amd64 or --prog-arm64 must be specified")
+	buildFileFlag := cmd.Flag("file")
+	b, err := os.ReadFile(buildFileFlag.Value.String())
+	if err != nil && (buildFileFlag.Changed || !errors.Is(err, os.ErrNotExist)) {
+		return fmt.Errorf("reading build file: %w", err)
+	} else if err == nil {
+		if err := yaml.Unmarshal(b, conf); err != nil {
+			return fmt.Errorf("unmarshal build.yaml: %w", err)
+		}
+	}
+
+	// make a temp folder to store the build results
+	tmpDir, err := os.MkdirTemp("", "gadget-build")
+	if err != nil {
+		return fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	buildScript := builder.GetBuildScript()
+
+	cmdArgs := []string{
+		"-c",
+		string(buildScript),
+		"", // TODO: why is it needed?
+		conf.EBPFProgram,
+		tmpDir,
+		conf.CFlags,
+	}
+
+	// TODO: Why is "" needed?
+	buildCmd := exec.Command("/bin/sh", cmdArgs...)
+	out, err := buildCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("build script: %w: %s", err, out)
+	}
+
+	imageIndexOpts := &imageIndexOpts{
+		image:              args[0],
+		definitionFilePath: conf.Definition,
+		progArm64FilePath:  filepath.Join(tmpDir, "arm64.bpf.o"),
+		progAmd64FilePath:  filepath.Join(tmpDir, "x86.bpf.o"),
 	}
 
 	ociStore, err := utils.GetLocalOciStore()
@@ -75,12 +122,12 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("get oci store: %w", err)
 	}
 
-	indexDesc, err := createImageIndex(ociStore, o)
+	indexDesc, err := createImageIndex(ociStore, imageIndexOpts)
 	if err != nil {
 		return fmt.Errorf("create image index: %w", err)
 	}
 
-	targetImage, err := utils.NormalizeImage(o.image)
+	targetImage, err := utils.NormalizeImage(imageIndexOpts.image)
 	if err != nil {
 		return fmt.Errorf("normalize image: %w", err)
 	}
@@ -182,7 +229,7 @@ func createManifestForTarget(target oras.Target, definitionFilePath, progFilePat
 	return manifestDesc, nil
 }
 
-func createImageIndex(target oras.Target, o *buildOptions) (ocispec.Descriptor, error) {
+func createImageIndex(target oras.Target, o *imageIndexOpts) (ocispec.Descriptor, error) {
 	// Read the eBPF program files and push them to the memory store
 	layers := []ocispec.Descriptor{}
 	if o.progAmd64FilePath != "" {
