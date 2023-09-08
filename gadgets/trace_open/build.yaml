@@ -1,0 +1,2 @@
+program: trace_open.bpf.c
+definition: trace_open.yaml
