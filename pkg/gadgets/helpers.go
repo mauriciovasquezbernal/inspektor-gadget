@@ -31,6 +31,7 @@ import (
 	"github.com/cilium/ebpf/link"
 	"golang.org/x/sys/unix"
 
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/btfhub"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
 
@@ -276,6 +277,9 @@ func LoadeBPFSpec(
 
 	opts := ebpf.CollectionOptions{
 		MapReplacements: mapReplacements,
+		Programs: ebpf.ProgramOptions{
+			KernelTypes: btfhub.GetBTFSpec(),
+		},
 	}
 
 	if err := spec.LoadAndAssign(objs, &opts); err != nil {

@@ -25,6 +25,7 @@ import (
 	"github.com/cilium/ebpf/link"
 	libseccomp "github.com/seccomp/libseccomp-golang"
 
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/btfhub"
 	containercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/container-collection"
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
@@ -70,7 +71,13 @@ func (t *Tracer) install() error {
 		return fmt.Errorf("loading asset: %w", err)
 	}
 
-	if err := spec.LoadAndAssign(&t.objs, nil); err != nil {
+	opts := ebpf.CollectionOptions{
+		Programs: ebpf.ProgramOptions{
+			KernelTypes: btfhub.GetBTFSpec(),
+		},
+	}
+
+	if err := spec.LoadAndAssign(&t.objs, &opts); err != nil {
 		return fmt.Errorf("loading ebpf program: %w", err)
 	}
 
