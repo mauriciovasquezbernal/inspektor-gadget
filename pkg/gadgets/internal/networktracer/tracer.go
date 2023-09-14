@@ -46,6 +46,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/sys/unix"
 
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/btfgen"
 	containercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/container-collection"
 	containerutils "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
@@ -115,6 +116,9 @@ func (t *Tracer[Event]) newAttachment(
 	opts := ebpf.CollectionOptions{
 		MapReplacements: map[string]*ebpf.Map{
 			"tail_call": t.dispatcherMap,
+		},
+		Programs: ebpf.ProgramOptions{
+			KernelTypes: btfgen.GetBTFSpec(),
 		},
 	}
 	if err = dispatcherSpec.LoadAndAssign(&a.dispatcherObjs, &opts); err != nil {

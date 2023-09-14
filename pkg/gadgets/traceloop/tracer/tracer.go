@@ -34,6 +34,7 @@ import (
 	libseccomp "github.com/seccomp/libseccomp-golang"
 	log "github.com/sirupsen/logrus"
 
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/btfgen"
 	containercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/container-collection"
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
@@ -149,7 +150,13 @@ func (t *Tracer) install() error {
 		})
 	}
 
-	if err := spec.LoadAndAssign(&t.objs, nil); err != nil {
+	opts := ebpf.CollectionOptions{
+		Programs: ebpf.ProgramOptions{
+			KernelTypes: btfgen.GetBTFSpec(),
+		},
+	}
+
+	if err := spec.LoadAndAssign(&t.objs, &opts); err != nil {
 		return fmt.Errorf("loading ebpf program: %w", err)
 	}
 

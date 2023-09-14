@@ -104,9 +104,6 @@ COPY gadget-container/hooks/nri/conf.json /opt/hooks/nri/
 
 ## Hooks Ends
 
-# BTF files
-COPY hack/btfs /btfs/
-
 COPY --from=bpftrace /usr/bin/bpftrace /usr/bin/bpftrace
 
 # Mitigate https://github.com/kubernetes/kubernetes/issues/106962.
