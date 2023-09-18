@@ -44,6 +44,8 @@ jobs:
       run: |
         make manifests generate generate-documentation
         git diff --exit-code HEAD --
+    - name: Setup tmate session
+      uses: mxschmitt/action-tmate@v3
     - name: Check that there are not broken links
       uses: gaurav-nelson/github-action-markdown-link-check@v1
       with:
