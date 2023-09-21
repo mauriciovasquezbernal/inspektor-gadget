@@ -282,7 +282,7 @@ func NewServer(conf *Conf) (*GadgetTracerManager, error) {
 	case "auto":
 		if containerhook.Supported() {
 			log.Infof("GadgetTracerManager: hook mode: fanotify+ebpf (auto)")
-			opts = append(opts, containercollection.WithContainerFanotifyEbpf())
+			opts = append(opts, containercollection.WithContainerFanotifyEbpf(true))
 			opts = append(opts, containercollection.WithInitialKubernetesContainers(g.nodeName))
 		} else if runcfanotify.Supported() {
 			log.Infof("GadgetTracerManager: hook mode: fanotify (auto)")
@@ -303,7 +303,7 @@ func NewServer(conf *Conf) (*GadgetTracerManager, error) {
 		opts = append(opts, containercollection.WithInitialKubernetesContainers(g.nodeName))
 	case "fanotify+ebpf":
 		log.Infof("GadgetTracerManager: hook mode: fanotify+ebpf")
-		opts = append(opts, containercollection.WithContainerFanotifyEbpf())
+		opts = append(opts, containercollection.WithContainerFanotifyEbpf(true))
 		opts = append(opts, containercollection.WithInitialKubernetesContainers(g.nodeName))
 	default:
 		return nil, fmt.Errorf("invalid hook mode: %s", conf.HookMode)

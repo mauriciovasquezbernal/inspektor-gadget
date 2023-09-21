@@ -589,10 +589,12 @@ func WithRuncFanotify() ContainerCollectionOption {
 // WithContainerFanotifyEbpf uses fanotify and eBPF to detect when containers
 // are created and add them in the ContainerCollection.
 //
+// If the failOnError argument is false, a warning will be printed instead of erroring out.
+//
 // This works either in the host pid namespace or in a container pid namespace.
 //
 // ContainerCollection.Initialize(WithContainerFanotifyEbpf())
-func WithContainerFanotifyEbpf() ContainerCollectionOption {
+func WithContainerFanotifyEbpf(failOnError bool) ContainerCollectionOption {
 	return func(cc *ContainerCollection) error {
 		containerNotifier, err := containerhook.NewContainerNotifier(func(notif containerhook.ContainerEvent) {
 			switch notif.Type {
@@ -613,7 +615,12 @@ func WithContainerFanotifyEbpf() ContainerCollectionOption {
 			}
 		})
 		if err != nil {
-			return fmt.Errorf("starting container fanotify: %w", err)
+			if failOnError {
+				return fmt.Errorf("starting container fanotify: %w", err)
+			}
+
+			log.Warn("failed to start container-hook: container enrichment and filtering won't work")
+			return nil
 		}
 
 		cc.cleanUpFuncs = append(cc.cleanUpFuncs, func() {
