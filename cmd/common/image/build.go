@@ -26,14 +26,20 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/oci"
 	"github.com/opencontainers/image-spec/specs-go"
 	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 	"oras.land/oras-go/v2"
 	"oras.land/oras-go/v2/content"
 	"oras.land/oras-go/v2/errdef"
+
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/columns"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/columns/ellipsis"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
+	runTypes "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/run/types"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/oci"
 )
 
 //go:embed build.sh
@@ -186,6 +192,117 @@ func runBuild(opts *cmdOpts) error {
 		definitionFilePath: conf.Definition,
 		progArm64FilePath:  filepath.Join(tmpDir, "arm64.bpf.o"),
 		progAmd64FilePath:  filepath.Join(tmpDir, "x86.bpf.o"),
+	}
+
+	// Generate or update the definition file from the information present on the eBPF object.
+	_, err = os.Stat(imageIndexOpts.definitionFilePath)
+
+	// if the file already exists, add new information
+	// TODO: Flag to enable updating?
+	update := err == nil
+
+	if !opts.fileChanged {
+		if update {
+			log.Debugf("Definition file found, updating it")
+		} else {
+			log.Debug("Definition file not found, generating it")
+		}
+
+		definition := &runTypes.GadgetDefinition{
+			Name:        "TODO: Fill the name",
+			Description: "TODO: fill the description",
+		}
+
+		// read info from existing file
+		if update {
+			def, err := os.ReadFile(imageIndexOpts.definitionFilePath)
+			if err != nil {
+				return err
+			}
+
+			err = yaml.Unmarshal(def, definition)
+			if err != nil {
+				return err
+			}
+		}
+
+		progPath := imageIndexOpts.progAmd64FilePath
+
+		progContent, err := os.ReadFile(progPath)
+		if err != nil {
+			return err
+		}
+
+		// columns
+		eventType, err := getEventTypeBTF(progContent)
+		if err != nil {
+			return err
+		}
+
+		// We can have some sanity checks, like checking if a column exists on the ebpf code
+		if update {
+			alleBPFColumns := make(map[string]struct{})
+			for _, member := range eventType.Members {
+				alleBPFColumns[member.Name] = struct{}{}
+			}
+
+			for _, attr := range definition.ColumnsAttrs {
+				if _, ok := alleBPFColumns[attr.Name]; !ok {
+					// TODO: should this be a hard error?
+					log.Warnf("column %s not found on the eBPF code", attr.Name)
+					//return fmt.Errorf("column %s not found on the eBPF code", attr.Name)
+				}
+			}
+		}
+
+		for i, member := range eventType.Members {
+			// skip specific IG types
+			switch member.Name {
+			case gadgets.L3EndpointTypeName, gadgets.L4EndpointTypeName:
+				continue
+			}
+
+			if update {
+				// check if column already exists
+				found := false
+				for _, attr := range definition.ColumnsAttrs {
+					if attr.Name == member.Name {
+						found = true
+						break
+					}
+				}
+
+				if found {
+					continue
+				}
+			}
+
+			log.Debugf("Adding column %s", member.Name)
+			attr := columns.Attributes{
+				Name:         member.Name,
+				Alignment:    columns.AlignLeft,
+				EllipsisType: ellipsis.End,
+				Width:        16,
+				Visible:      true,
+				Order:        1000 + i,
+			}
+
+			definition.ColumnsAttrs = append(definition.ColumnsAttrs, attr)
+		}
+
+		marshalled, err := yaml.Marshal(definition)
+		if err != nil {
+			return err
+		}
+
+		// TODO: params!
+
+		if err := os.WriteFile(imageIndexOpts.definitionFilePath, marshalled, 0644); err != nil {
+			return err
+		}
+
+		// TODO: dirty hack!
+		os.Chown(imageIndexOpts.definitionFilePath, 1000, 1000)
 	}
 
 	ociStore, err := oci.GetLocalOciStore()

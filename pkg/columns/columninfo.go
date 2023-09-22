@@ -45,35 +45,35 @@ type subField struct {
 
 type Attributes struct {
 	// Name of the column; case-insensitive for most use cases; includes inherited prefixes
-	Name string `yaml:"name"`
+	Name string `yaml:"name,omitempty"`
 	// Name of the columns without inherited prefixes
-	RawName string `yaml:"raw_name"`
+	RawName string `yaml:"raw_name,omitempty"`
 	// Width to reserve for this column
-	Width int `yaml:"width"`
+	Width int `yaml:"width,omitempty"`
 	// MinWidth will be the minimum width this column will be scaled to when using auto-scaling
-	MinWidth int `yaml:"min_width"`
+	MinWidth int `yaml:"min_width,omitempty"`
 	// MaxWidth will be the maximum width this column will be scaled to when using auto-scaling
-	MaxWidth int `yaml:"max_width"`
+	MaxWidth int `yaml:"max_width,omitempty"`
 	// Alignment of this column (left or right)
-	Alignment Alignment `yaml:"alignment"`
+	Alignment Alignment `yaml:"alignment,omitempty"`
 	// Visible defines whether a column is to be shown by default
 	Visible bool `yaml:"visible"`
 	// GroupType defines the aggregation method used when grouping this column
-	GroupType GroupType `yaml:"group_type"`
+	GroupType GroupType `yaml:"group_type,omitempty"`
 	// EllipsisType defines how to abbreviate this column if the value needs more space than is available
-	EllipsisType ellipsis.EllipsisType `yaml:"ellipsis_type"`
+	EllipsisType ellipsis.EllipsisType `yaml:"ellipsis_type,omitempty"`
 	// FixedWidth forces the Width even when using Auto-Scaling
-	FixedWidth bool `yaml:"fixed_width"`
+	FixedWidth bool `yaml:"fixed_width,omitempty"`
 	// Precision defines how many decimals should be shown on float values, default: 2
-	Precision int `yaml:"precision"`
+	Precision int `yaml:"precision,omitempty"`
 	// Description can hold a short description of the field that can be used to aid the user
-	Description string `yaml:"description"`
+	Description string `yaml:"description,omitempty"`
 	// Order defines the default order in which columns are shown
-	Order int `yaml:"order"`
+	Order int `yaml:"order,omitempty"`
 	// Tags can be used to dynamically include or exclude columns
-	Tags []string `yaml:"tags"`
+	Tags []string `yaml:"tags,omitempty"`
 	// Template defines the template that will be used. Non-typed templates will be applied first.
-	Template string `yaml:"template"`
+	Template string `yaml:"template,omitempty"`
 }
 
 type Column[T any] struct {
