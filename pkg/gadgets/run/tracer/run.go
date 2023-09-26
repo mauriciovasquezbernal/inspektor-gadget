@@ -343,28 +343,14 @@ func addL4EndpointColumns(
 	})
 }
 
-func (g *GadgetDesc) getColumns(params *params.Params, args []string) (*columns.Columns[types.Event], error) {
-	if len(args) != 0 {
-		return nil, fmt.Errorf("no arguments expected: received %d", len(args))
-	}
-	progContent := params.Get(ProgramContent).AsBytes()
-	definitionBytes := params.Get(ParamDefinition).AsBytes()
-	if len(definitionBytes) == 0 {
-		return nil, fmt.Errorf("no definition provided")
-	}
-
-	valueStruct, err := getEventTypeBTF(progContent)
+func (g *GadgetDesc) getColumns(info *types.GadgetInfo) (*columns.Columns[types.Event], error) {
+	gadgetDefinition := info.GadgetDefinition
+	eventType, err := getEventTypeBTF(info.ProgContent)
 	if err != nil {
 		return nil, fmt.Errorf("getting value struct: %w", err)
 	}
 
 	cols := types.GetColumns()
-
-	var gadgetDefinition types.GadgetDefinition
-
-	if err := yaml.Unmarshal(definitionBytes, &gadgetDefinition); err != nil {
-		return nil, fmt.Errorf("unmarshaling definition: %w", err)
-	}
 
 	colAttrs := map[string]columns.Attributes{}
 	for _, col := range gadgetDefinition.ColumnsAttrs {
@@ -376,7 +362,7 @@ func (g *GadgetDesc) getColumns(params *params.Params, args []string) (*columns.
 	l3endpointCounter := 0
 	l4endpointCounter := 0
 
-	for _, member := range valueStruct.Members {
+	for _, member := range eventType.Members {
 		member := member
 
 		attrs, ok := colAttrs[member.Name]
@@ -455,24 +441,25 @@ func (g *GadgetDesc) getColumns(params *params.Params, args []string) (*columns.
 	return cols, nil
 }
 
-func (g *GadgetDesc) CustomParser(params *params.Params, args []string) (parser.Parser, error) {
-	cols, err := g.getColumns(params, args)
+func (g *GadgetDesc) CustomParser(info *types.GadgetInfo) (parser.Parser, error) {
+	cols, err := g.getColumns(info)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting columns: %w", err)
 	}
+
 	return parser.NewParser[types.Event](cols), nil
 }
 
-func (g *GadgetDesc) customJsonParser(params *params.Params, args []string, options ...columns_json.Option) (*columns_json.Formatter[types.Event], error) {
-	cols, err := g.getColumns(params, args)
+func (g *GadgetDesc) customJsonParser(info *types.GadgetInfo, options ...columns_json.Option) (*columns_json.Formatter[types.Event], error) {
+	cols, err := g.getColumns(info)
 	if err != nil {
 		return nil, err
 	}
 	return columns_json.NewFormatter(cols.ColumnMap, options...), nil
 }
 
-func (g *GadgetDesc) JSONConverter(params *params.Params, printer gadgets.Printer) func(ev any) {
-	formatter, err := g.customJsonParser(params, []string{})
+func (g *GadgetDesc) JSONConverter(info *types.GadgetInfo, printer types.Printer) func(ev any) {
+	formatter, err := g.customJsonParser(info)
 	if err != nil {
 		printer.Logf(logger.WarnLevel, "creating json formatter: %s", err)
 		return nil
@@ -483,8 +470,8 @@ func (g *GadgetDesc) JSONConverter(params *params.Params, printer gadgets.Printe
 	}
 }
 
-func (g *GadgetDesc) JSONPrettyConverter(params *params.Params, printer gadgets.Printer) func(ev any) {
-	formatter, err := g.customJsonParser(params, []string{}, columns_json.WithPrettyPrint())
+func (g *GadgetDesc) JSONPrettyConverter(info *types.GadgetInfo, printer types.Printer) func(ev any) {
+	formatter, err := g.customJsonParser(info, columns_json.WithPrettyPrint())
 	if err != nil {
 		printer.Logf(logger.WarnLevel, "creating json formatter: %s", err)
 		return nil
@@ -495,8 +482,8 @@ func (g *GadgetDesc) JSONPrettyConverter(params *params.Params, printer gadgets.
 	}
 }
 
-func (g *GadgetDesc) YAMLConverter(params *params.Params, printer gadgets.Printer) func(ev any) {
-	formatter, err := g.customJsonParser(params, []string{})
+func (g *GadgetDesc) YAMLConverter(info *types.GadgetInfo, printer types.Printer) func(ev any) {
+	formatter, err := g.customJsonParser(info)
 	if err != nil {
 		printer.Logf(logger.WarnLevel, "creating json formatter: %s", err)
 		return nil
