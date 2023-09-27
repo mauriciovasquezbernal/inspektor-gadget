@@ -55,6 +55,7 @@ func newTopFileCmd(ns string, cmd string, startAndStop bool) *Command {
 			e.WriteBytes = 0
 
 			e.Runtime.ContainerID = ""
+			e.K8s.Node = ""
 
 			// Docker can provide different values for ContainerImageName. See `getContainerImageNamefromImage`
 			if isDockerRuntime {

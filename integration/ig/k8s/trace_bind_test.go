@@ -60,6 +60,7 @@ func TestTraceBind(t *testing.T) {
 				e.MountNsID = 0
 
 				e.Runtime.ContainerID = ""
+				e.K8s.Node = ""
 
 				// Docker can provide different values for ContainerImageName. See `getContainerImageNamefromImage`
 				if isDockerRuntime {

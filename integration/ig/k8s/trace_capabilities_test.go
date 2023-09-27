@@ -81,6 +81,7 @@ func TestTraceCapabilities(t *testing.T) {
 				}
 
 				e.Runtime.ContainerID = ""
+				e.K8s.Node = ""
 
 				// Docker can provide different values for ContainerImageName. See `getContainerImageNamefromImage`
 				if isDockerRuntime {

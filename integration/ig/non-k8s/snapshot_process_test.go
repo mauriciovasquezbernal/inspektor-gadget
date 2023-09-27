@@ -50,6 +50,7 @@ func TestSnapshotProcess(t *testing.T) {
 				e.ParentPid = 0
 				e.MountNsID = 0
 
+				e.K8s.Node = ""
 				e.Runtime.ContainerID = ""
 				// TODO: Handle once we support getting ContainerImageName from Docker
 				e.Runtime.ContainerImageName = ""

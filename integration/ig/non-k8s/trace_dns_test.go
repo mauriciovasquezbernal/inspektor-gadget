@@ -133,6 +133,7 @@ func TestTraceDns(t *testing.T) {
 					e.Latency = 1
 				}
 
+				e.K8s.Node = ""
 				e.Runtime.ContainerID = ""
 				// TODO: Handle once we support getting ContainerImageName from Docker
 				e.Runtime.ContainerImageName = ""

@@ -84,6 +84,7 @@ func TestTraceNetwork(t *testing.T) {
 				e.Pid = 0
 				e.Tid = 0
 
+				e.K8s.Node = ""
 				e.Runtime.ContainerID = ""
 				// TODO: Handle once we support getting ContainerImageName from Docker
 				e.Runtime.ContainerImageName = ""

@@ -93,6 +93,7 @@ func TestTraceExec(t *testing.T) {
 				e.MountNsID = 0
 
 				e.Runtime.ContainerID = ""
+				e.K8s.Node = ""
 
 				// Docker can provide different values for ContainerImageName. See `getContainerImageNamefromImage`
 				if isDockerRuntime {
@@ -153,6 +154,7 @@ func TestTraceExecHost(t *testing.T) {
 				e.SessionId = 0
 				e.Retval = 0
 				e.MountNsID = 0
+				e.K8s.Node = ""
 			}
 
 			ExpectEntriesToMatch(t, output, normalize, expectedEntries...)

@@ -16,6 +16,7 @@ package igmanager
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/rlimit"
@@ -105,6 +106,18 @@ func NewManager(runtimes []*containerutilsTypes.RuntimeConfig) (*IGManager, erro
 	if !log.IsLevelEnabled(log.DebugLevel) && isDefaultContainerRuntimeConfig(runtimes) {
 		warnings := []containercollection.ContainerCollectionOption{containercollection.WithDisableContainerRuntimeWarnings()}
 		opts = append(warnings, opts...)
+	}
+
+	// TODO: This isn't really a k8s node name because kubelet can override it with --hostname-override
+	//       We should probably use the node name from the k8s API by matching against current machine-id
+	//       revisit this when ig can talk (optionally) to the k8s API
+	//       https://github.com/inspektor-gadget/inspektor-gadget/issues/1992
+	nodeName, err := os.Hostname()
+	if err != nil {
+		log.Debugf("Failed to get hostname: %v", err)
+	}
+	if nodeName != "" {
+		opts = append(opts, containercollection.WithNodeName(nodeName))
 	}
 
 	err = l.ContainerCollection.Initialize(opts...)

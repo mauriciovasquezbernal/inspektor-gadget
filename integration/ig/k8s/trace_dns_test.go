@@ -202,6 +202,7 @@ func TestTraceDns(t *testing.T) {
 				}
 
 				e.Runtime.ContainerID = ""
+				e.K8s.Node = ""
 
 				// Docker can provide different values for ContainerImageName. See `getContainerImageNamefromImage`
 				if isDockerRuntime {
@@ -306,6 +307,8 @@ func TestTraceDnsHost(t *testing.T) {
 				e.SrcIP = ""
 				e.SrcPort = 0
 				e.DstIP = ""
+
+				e.K8s.Node = ""
 			}
 
 			ExpectEntriesToMatch(t, output, normalize, expectedEntries...)
