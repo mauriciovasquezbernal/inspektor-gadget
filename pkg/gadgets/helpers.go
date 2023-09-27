@@ -209,7 +209,12 @@ func DetectBpfKtimeGetBootNs() bool {
 			return
 		}
 
-		bpfKtimeGetBootNsExists = len(enum.Values) >= BpfKtimeGetBootNsFuncID
+		last := enum.Values[len(enum.Values) - 1]
+		if last.Name != "__BPF_FUNC_MAX_ID" {
+			panic("Last BPF helper must be __BPF_FUNC_MAX_ID")
+		}
+
+		bpfKtimeGetBootNsExists = last.Value > BpfKtimeGetBootNsFuncID
 	})
 
 	return bpfKtimeGetBootNsExists
