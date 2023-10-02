@@ -36,16 +36,12 @@ KERNEL=$(uname -r)
 echo -n "Kernel detected: "
 echo $KERNEL
 
-echo -n "Gadget image: "
-echo $GADGET_IMAGE
-
-echo "Gadget image flavour: ${GADGET_IMAGE_FLAVOUR}"
+echo -n "Gadget image: ${GADGET_IMAGE}"
 
 echo "Deployment options:"
 env | grep '^INSPEKTOR_GADGET_OPTION_.*='
 
-echo -n "Inspektor Gadget version: "
-echo $INSPEKTOR_GADGET_VERSION
+echo "Inspektor Gadget version: ${INSPEKTOR_GADGET_VERSION}"
 
 CRIO=0
 if grep -q '^1:name=systemd:.*/crio-[0-9a-f]*\.scope$' /proc/self/cgroup > /dev/null ; then
