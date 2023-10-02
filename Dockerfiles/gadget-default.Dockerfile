@@ -1,8 +1,7 @@
 # Dockerfile for Inspektor Gadget CO-RE container image gadgets.
 # This is a reduced gadget container image that supports only the CO-RE
 # implementation of the gadgets, i.e, it doesn't depend on BCC. This
-# image is much smaller than the image built with gadget.bcc.Dockerfile
-# and is designed to be used on systems that support BTF
+# image is designed to be used on systems that support BTF
 # (CONFIG_DEBUG_INFO_BTF).
 # It's the default image that is deployed in Inspektor Gadget.
 

@@ -36,12 +36,6 @@ KERNEL=$(uname -r)
 echo -n "Kernel detected: "
 echo $KERNEL
 
-# The gadget-core image does not provide bcc.
-if [ "$GADGET_IMAGE_FLAVOUR" = "bcc" ] ; then
-	echo -n "bcc detected: "
-	dpkg-query --show libbcc | awk '{print $2}' || true
-fi
-
 echo -n "Gadget image: "
 echo $GADGET_IMAGE
 
