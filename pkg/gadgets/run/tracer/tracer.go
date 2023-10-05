@@ -29,6 +29,7 @@ import (
 	"github.com/cilium/ebpf/link"
 	"github.com/cilium/ebpf/perf"
 	"github.com/cilium/ebpf/ringbuf"
+	"gopkg.in/yaml.v3"
 
 	containercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/container-collection"
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
@@ -54,9 +55,9 @@ type l4EndpointT struct {
 }
 
 type Config struct {
-	ProgLocation string
-	ProgContent  []byte
-	MountnsMap   *ebpf.Map
+	ProgContent []byte
+	Metadata    *types.GadgetMetadata
+	MountnsMap  *ebpf.Map
 }
 
 type Tracer struct {
@@ -133,7 +134,7 @@ func (t *Tracer) Stop() {
 func (t *Tracer) handleTraceMap() (*ebpf.MapSpec, error) {
 	// If the gadget doesn't provide a map it's not an error becuase it could provide other ways
 	// to output data
-	traceMap := getTraceMap(t.spec)
+	traceMap := getTraceMap(t.spec, t.config.Metadata)
 	if traceMap == nil {
 		return nil, nil
 	}
@@ -160,10 +161,6 @@ func (t *Tracer) handleTraceMap() (*ebpf.MapSpec, error) {
 func (t *Tracer) installTracer() error {
 	// Load the spec
 	var err error
-	t.spec, err = loadSpec(t.config.ProgContent)
-	if err != nil {
-		return err
-	}
 
 	mapReplacements := map[string]*ebpf.Map{}
 	consts := map[string]interface{}{}
@@ -452,10 +449,33 @@ func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 		AuthFile: params.Get("authfile").AsString(),
 	}
 
-	var err error
-	t.config.ProgContent, err = oci.GetEbpfObject(gadgetCtx.Context(), args[0], authOpts)
+	gadget, err := oci.GetGadgetImage(gadgetCtx.Context(), args[0], authOpts)
 	if err != nil {
-		return fmt.Errorf("get ebpf program: %w", err)
+		return fmt.Errorf("getting gadget image: %w", err)
+	}
+
+	t.config.ProgContent = gadget.EbpfObject
+	t.spec, err = loadSpec(t.config.ProgContent)
+	if err != nil {
+		return err
+	}
+
+	t.config.Metadata = &types.GadgetMetadata{}
+
+	if len(gadget.Metadata) == 0 {
+		gadgetCtx.Logger().Warnf("The gadget doesn't provide metadata, synthesizing one from the spec")
+		// metadata is not present. synthesize something on the fly from the spec
+		if err := t.config.Metadata.Populate(t.spec); err != nil {
+			return err
+		}
+	} else {
+		if err := yaml.Unmarshal(gadget.Metadata, &t.config.Metadata); err != nil {
+			return fmt.Errorf("unmarshaling metadata: %w", err)
+		}
+
+		if err := t.config.Metadata.Validate(t.spec); err != nil {
+			return fmt.Errorf("gadget metadata isn't valid: %w", err)
+		}
 	}
 
 	if err := t.installTracer(); err != nil {
