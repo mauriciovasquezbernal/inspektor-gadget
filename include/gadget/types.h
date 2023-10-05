@@ -28,4 +28,7 @@ struct gadget_l4endpoint_t {
 // Inode id of a mount namespace. It's used to enrich the event in user space
 typedef __u64 mnt_ns_id_t;
 
+#define GADGET_TRACE_MAP(name) \
+	const void * gadget_trace_map_##name __attribute__((unused));
+
 #endif /* __TYPES_H */

@@ -54,12 +54,13 @@ type buildFile struct {
 }
 
 type cmdOpts struct {
-	path         string
-	file         string
-	fileChanged  bool
-	image        string
-	local        bool
-	builderImage string
+	path           string
+	file           string
+	fileChanged    bool
+	image          string
+	local          bool
+	builderImage   string
+	updateMetadata bool
 }
 
 func NewBuildCmd() *cobra.Command {
@@ -88,6 +89,7 @@ func NewBuildCmd() *cobra.Command {
 	cmd.Flags().BoolVarP(&opts.local, "local", "l", false, "Build using local tools")
 	cmd.Flags().StringVarP(&opts.image, "tag", "t", "", "Name for the built image (format name:tag)")
 	cmd.Flags().StringVar(&opts.builderImage, "builder-image", DEFAULT_BUILDER_IMAGE, "Builder image to use")
+	cmd.Flags().BoolVar(&opts.updateMetadata, "update-metadata", false, "Update the metadata according to the eBPF code")
 
 	return cmd
 }
@@ -148,11 +150,13 @@ func runBuild(opts *cmdOpts) error {
 	}
 
 	buildOpts := &oci.BuildGadgetImageOpts{
+		EBPFSourcePath: conf.EBPFSource,
 		EBPFObjectPaths: map[string]string{
 			oci.ArchAmd64: filepath.Join(tmpDir, oci.ArchAmd64+".bpf.o"),
 			oci.ArchArm64: filepath.Join(tmpDir, oci.ArchArm64+".bpf.o"),
 		},
-		MetadataPath: conf.Metadata,
+		MetadataPath:   conf.Metadata,
+		UpdateMetadata: opts.updateMetadata,
 	}
 
 	desc, err := oci.BuildGadgetImage(context.TODO(), buildOpts, opts.image)
