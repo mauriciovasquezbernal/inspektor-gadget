@@ -17,10 +17,19 @@ package types
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/hashicorp/go-multierror"
+	log "github.com/sirupsen/logrus"
+
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/columns"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
+)
+
+const (
+	DefaultColumnWidth = 16
 )
 
 type Alignment string
@@ -174,4 +183,175 @@ func (m *GadgetMetadata) validateStructs(spec *ebpf.CollectionSpec) error {
 	}
 
 	return result
+}
+
+// Populate fills the metadata from its ebpf spec
+func (m *GadgetMetadata) Populate(spec *ebpf.CollectionSpec) error {
+	if m.Name == "" {
+		m.Name = "TODO: Fill the gadget name"
+	}
+
+	if m.Description == "" {
+		m.Description = "TODO: Fill the gadget description"
+	}
+
+	if m.Tracers == nil {
+		m.Tracers = make(map[string]Tracer)
+	}
+
+	if m.Structs == nil {
+		m.Structs = make(map[string]Struct)
+	}
+
+	if err := m.populateTracers(spec); err != nil {
+		return fmt.Errorf("handling trace maps: %w", err)
+	}
+
+	return nil
+}
+
+func getUnderlyingType(tf *btf.Typedef) (btf.Type, error) {
+	switch typedMember := tf.Type.(type) {
+	case *btf.Typedef:
+		return getUnderlyingType(typedMember)
+	default:
+		return typedMember, nil
+	}
+}
+
+func getColumnSize(typ btf.Type) uint {
+	switch typedMember := typ.(type) {
+	case *btf.Int:
+		switch typedMember.Encoding {
+		case btf.Signed:
+			switch typedMember.Size {
+			case 1:
+				return columns.MaxCharsInt8
+			case 2:
+				return columns.MaxCharsInt16
+			case 4:
+				return columns.MaxCharsInt32
+			case 8:
+				return columns.MaxCharsInt64
+
+			}
+		case btf.Unsigned:
+			switch typedMember.Size {
+			case 1:
+				return columns.MaxCharsUint8
+			case 2:
+				return columns.MaxCharsUint16
+			case 4:
+				return columns.MaxCharsUint32
+			case 8:
+				return columns.MaxCharsUint64
+			}
+		case btf.Bool:
+			return columns.MaxCharsBool
+		case btf.Char:
+			return columns.MaxCharsChar
+		}
+	case *btf.Typedef:
+		typ, _ := getUnderlyingType(typedMember)
+		return getColumnSize(typ)
+	}
+
+	return DefaultColumnWidth
+}
+
+func (m *GadgetMetadata) populateTracers(spec *ebpf.CollectionSpec) error {
+	traceMap := getTracerMapFromeBPF(spec)
+	if traceMap == nil {
+		log.Debug("No trace map found")
+		return nil
+	}
+
+	if err := validateTraceMap(traceMap); err != nil {
+		return fmt.Errorf("trace map is invalid: %w", err)
+	}
+
+	traceMapStruct := traceMap.Value.(*btf.Struct)
+
+	found := false
+
+	// TODO: this is weird but we need to check the map name as the tracer name can be
+	// different.
+	for _, t := range m.Tracers {
+		if t.MapName == traceMap.Name {
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		log.Debugf("Adding tracer %q", traceMap.Name)
+		m.Tracers[traceMap.Name] = Tracer{
+			MapName:    traceMap.Name,
+			StructName: traceMapStruct.Name,
+		}
+	} else {
+		log.Debugf("Tracer using map %q already defined, skipping", traceMap.Name)
+	}
+
+	gadgetStruct := m.Structs[traceMapStruct.Name]
+	existingFields := make(map[string]struct{})
+	for _, field := range gadgetStruct.Fields {
+		existingFields[field.Name] = struct{}{}
+	}
+
+	for _, member := range traceMapStruct.Members {
+		// skip some specific members
+		if member.Name == "timestamp" {
+			log.Debug("Ignoring timestamp column: see https://github.com/inspektor-gadget/inspektor-gadget/issues/2000")
+			continue
+		}
+		// TODO: temporary disable mount ns as it'll be duplicated otherwise
+		if member.Type.TypeName() == gadgets.MntNsIdTypeName {
+			continue
+		}
+
+		// check if column already exists
+		if _, ok := existingFields[member.Name]; ok {
+			log.Debugf("Column %q already exists, skipping", member.Name)
+			continue
+		}
+
+		log.Debugf("Adding column %q", member.Name)
+		field := Field{
+			Name:        member.Name,
+			Description: "TODO: Fill field description",
+			Attributes: FieldAttributes{
+				Width:     getColumnSize(member.Type),
+				Alignment: AlignmentLeft,
+				Ellipsis:  EllipsisEnd,
+			},
+		}
+
+		gadgetStruct.Fields = append(gadgetStruct.Fields, field)
+	}
+
+	m.Structs[traceMapStruct.Name] = gadgetStruct
+
+	return nil
+}
+
+// getTracerMapFromeBPF returns the tracer map from the eBPF object.
+// It looks for maps marked with GADGET_TRACE_MAP() and returns the first one.
+func getTracerMapFromeBPF(spec *ebpf.CollectionSpec) *ebpf.MapSpec {
+	var mapName string
+
+	it := spec.Types.Iterate()
+	for it.Next() {
+		v, ok := it.Type.(*btf.Var)
+		if !ok {
+			continue
+		}
+
+		if strings.HasPrefix(v.Name, gadgets.TraceMapPrefix) {
+			mapName = strings.TrimPrefix(v.Name, gadgets.TraceMapPrefix)
+			break
+		}
+	}
+
+	return spec.Maps[mapName]
 }
