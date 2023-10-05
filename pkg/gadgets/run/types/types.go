@@ -17,12 +17,15 @@ package types
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
 	"github.com/hashicorp/go-multierror"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/columns"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/parser"
@@ -227,6 +230,118 @@ func (g *GadgetMetadata) Validate(spec *ebpf.CollectionSpec) error {
 	}
 
 	return result
+}
+
+// Populate fills the metadata  from its ebpf spec
+func (g *GadgetMetadata) Populate(spec *ebpf.CollectionSpec) error {
+	if err := populateTraceMaps(spec, g); err != nil {
+		return fmt.Errorf("handling trace maps: %w", err)
+	}
+
+	return nil
+}
+
+func getTraceMapFromeBPF(spec *ebpf.CollectionSpec) *ebpf.MapSpec {
+	var mapName string
+
+	it := spec.Types.Iterate()
+	for it.Next() {
+		v, ok := it.Type.(*btf.Var)
+		if !ok {
+			continue
+		}
+
+		// TODO: add more checks here.
+
+		if strings.HasPrefix(v.Name, gadgets.TraceMapPrefix) {
+			mapName = strings.TrimPrefix(v.Name, gadgets.TraceMapPrefix)
+			break
+		}
+	}
+
+	if mapName == "" {
+		return nil
+	}
+
+	for _, m := range spec.Maps {
+		if m.Name != mapName {
+			continue
+		}
+
+		if m.Type != ebpf.RingBuf && m.Type != ebpf.PerfEventArray {
+			continue
+		}
+
+		return m
+	}
+
+	return nil
+}
+
+func populateTraceMaps(spec *ebpf.CollectionSpec, metadata *GadgetMetadata) error {
+	traceMap := getTraceMapFromeBPF(spec)
+	if traceMap == nil {
+		log.Debug("No trace map found")
+		return nil
+	}
+
+	traceMapStruct, ok := traceMap.Value.(*btf.Struct)
+	if !ok {
+		return fmt.Errorf("BPF map %q does not have BTF info for values", traceMap.Name)
+	}
+
+	if metadata.TraceMaps == nil {
+		metadata.TraceMaps = make(map[string]TraceMaps)
+	}
+
+	if metadata.Structs == nil {
+		metadata.Structs = make(map[string]Struct)
+	}
+
+	metadata.TraceMaps[traceMap.Name] = TraceMaps{
+		StructName: traceMapStruct.Name,
+	}
+
+	gadgetStruct := metadata.Structs[traceMapStruct.Name]
+	existingFields := make(map[string]struct{})
+	for _, field := range gadgetStruct.Fields {
+		existingFields[field.Name] = struct{}{}
+	}
+
+	for _, member := range traceMapStruct.Members {
+		// skip some specific members
+		if member.Name == "timestamp" {
+			log.Debug("Ignoring timestamp column: see https://github.com/inspektor-gadget/inspektor-gadget/issues/2000")
+			continue
+		}
+		// TODO: temporary disable mount ns as it'll be duplicated otherwise
+		if member.Type.TypeName() == gadgets.MntNsIdTypeName {
+			continue
+		}
+
+		// check if column already exists
+		if _, ok := existingFields[member.Name]; ok {
+			log.Debugf("Column %s already exists, skipping", member.Name)
+			continue
+		}
+
+		log.Debugf("Adding column %s", member.Name)
+		field := Field{
+			Name:        member.Name,
+			Description: "TODO: Fill field description",
+			Attributes: FieldAttributes{
+				Width:     16,
+				Alignment: AlignmentLeft,
+				Ellipsis:  EllipsisEnd,
+			},
+		}
+
+		gadgetStruct.Fields = append(gadgetStruct.Fields, field)
+	}
+
+	metadata.Structs[traceMapStruct.Name] = gadgetStruct
+
+	return nil
 }
 
 // Printer is implemented by objects that can print information, like frontends.
