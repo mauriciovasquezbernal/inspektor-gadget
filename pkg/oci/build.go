@@ -42,11 +42,15 @@ const (
 )
 
 type BuildGadgetImageOpts struct {
+	// Source path of the eBPF program. Currently it's not used for compilation purposes
+	EBPFSourcePath string
 	// List of eBPF objects to include in the image. The key is the architecture and the value
 	// is the path to the eBPF object.
 	EBPFObjectPaths map[string]string
 	// Path to the metadata file.
 	MetadataPath string
+	// If true, the metadata is updated to follow changes in the eBPF objects.
+	UpdateMetadata bool
 }
 
 // BuildGadgetImage creates an OCI image with the objects provided in opts. The image parameter in
@@ -56,6 +60,12 @@ func BuildGadgetImage(ctx context.Context, opts *BuildGadgetImageOpts, image str
 	ociStore, err := getLocalOciStore()
 	if err != nil {
 		return nil, fmt.Errorf("getting oci store: %w", err)
+	}
+
+	if opts.UpdateMetadata {
+		if err := createOrUpdateMetadataFile(ctx, opts); err != nil {
+			return nil, fmt.Errorf("updating metadata file: %w", err)
+		}
 	}
 
 	indexDesc, err := createImageIndex(ctx, ociStore, opts)
@@ -117,7 +127,12 @@ func createEbpfProgramDesc(ctx context.Context, target oras.Target, progFilePath
 func createMetadataDesc(ctx context.Context, target oras.Target, metadataFilePath string) (ocispec.Descriptor, error) {
 	metadataBytes, err := os.ReadFile(metadataFilePath)
 	if err != nil {
-		return ocispec.Descriptor{}, fmt.Errorf("reading metadata file: %w", err)
+		if !os.IsNotExist(err) {
+			return ocispec.Descriptor{}, fmt.Errorf("reading metadata file: %w", err)
+		}
+		// If the file doesn't exist just save an empty metadata file.
+		// TODO: avoid adding layer?
+		metadataBytes = []byte("")
 	}
 	defDesc := content.NewDescriptorFromBytes(metadataMediaType, metadataBytes)
 	defDesc.Annotations = map[string]string{

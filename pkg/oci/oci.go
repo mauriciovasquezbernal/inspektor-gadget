@@ -471,9 +471,11 @@ func getMetadataFromManifest(ctx context.Context, target oras.Target, manifest *
 	if err != nil {
 		return nil, fmt.Errorf("getting metadata from descriptor: %w", err)
 	}
-	if len(metadata) == 0 {
-		return nil, errors.New("metadata file is empty")
-	}
+
+	// TODO: metadata is optional
+	//if len(metadata) == 0 {
+	//	return nil, errors.New("metadata file is empty")
+	//}
 	return metadata, nil
 }
 
