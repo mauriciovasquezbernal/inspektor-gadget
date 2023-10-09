@@ -48,6 +48,7 @@ type GadgetContext struct {
 	result                   []byte
 	resultError              error
 	timeout                  time.Duration
+	gadgetType               gadgets.GadgetType
 }
 
 func New(
@@ -62,6 +63,7 @@ func New(
 	parser parser.Parser,
 	logger logger.Logger,
 	timeout time.Duration,
+	gadgetType gadgets.GadgetType,
 ) *GadgetContext {
 	gCtx, cancel := context.WithCancel(ctx)
 
@@ -79,6 +81,7 @@ func New(
 		operators:                operators.GetOperatorsForGadget(gadget),
 		operatorsParamCollection: operatorsParamCollection,
 		timeout:                  timeout,
+		gadgetType:               gadgetType,
 	}
 }
 
@@ -132,6 +135,10 @@ func (c *GadgetContext) OperatorsParamCollection() params.Collection {
 
 func (c *GadgetContext) Timeout() time.Duration {
 	return c.timeout
+}
+
+func (c *GadgetContext) GadgetType() gadgets.GadgetType {
+	return c.gadgetType
 }
 
 func WithTimeoutOrCancel(ctx context.Context, timeout time.Duration) (context.Context, context.CancelFunc) {

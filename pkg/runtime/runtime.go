@@ -38,6 +38,7 @@ type GadgetContext interface {
 	Args() []string
 	OperatorsParamCollection() params.Collection
 	Timeout() time.Duration
+	GadgetType() gadgets.GadgetType
 }
 
 // GadgetResult contains the (optional) payload and error of a gadget run for a node

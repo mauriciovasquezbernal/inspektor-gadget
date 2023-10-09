@@ -58,6 +58,7 @@ type Event struct {
 type GadgetInfo struct {
 	GadgetMetadata *GadgetMetadata
 	ProgContent    []byte
+	GadgetType     gadgets.GadgetType
 }
 
 func (ev *Event) GetEndpoints() []*eventtypes.L3Endpoint {
