@@ -85,6 +85,10 @@ func (g *GadgetDesc) getGadgetType(spec *ebpf.CollectionSpec,
 		return gadgets.TypeTrace, nil
 	}
 
+	if t := getIterType(spec, gadgetMetadata); t != nil {
+		return gadgets.TypeOneShot, nil
+	}
+
 	return gadgets.TypeUnknown, fmt.Errorf("unknown gadget type")
 }
 
@@ -159,6 +163,26 @@ func getTraceMap(spec *ebpf.CollectionSpec, gadgetMetadata *types.GadgetMetadata
 	return traceMap
 }
 
+// getIterType looks for the structure used by the iterator programs. If none is found, nil is
+// returned.
+func getIterType(spec *ebpf.CollectionSpec, gadgetMetadata *types.GadgetMetadata) *btf.Struct {
+	var iterTypeName string
+	var btfStruct *btf.Struct
+
+	for _, it := range gadgetMetadata.Iterators {
+		iterTypeName = it.StructName
+		break
+	}
+
+	if iterTypeName == "" {
+		return nil
+	}
+
+	spec.Types.TypeByName(iterTypeName, &btfStruct)
+
+	return btfStruct
+}
+
 func getEventTypeBTF(info *types.GadgetInfo) (*btf.Struct, error) {
 	spec, err := loadSpec(info.ProgContent)
 	if err != nil {
@@ -174,6 +198,12 @@ func getEventTypeBTF(info *types.GadgetInfo) (*btf.Struct, error) {
 		}
 
 		return valueStruct, nil
+	}
+
+	// Look for iterators
+	iterType := getIterType(spec, info.GadgetMetadata)
+	if iterType != nil {
+		return iterType, nil
 	}
 
 	return nil, fmt.Errorf("the gadget doesn't provide any compatible way to show information")
