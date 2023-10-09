@@ -77,11 +77,17 @@ type Tracer struct {
 	StructName string `yaml:"structName"`
 }
 
+type Snapshotter struct {
+	ProgramName string `yaml:"programName"`
+	StructName  string `yaml:"structName"`
+}
+
 type GadgetMetadata struct {
-	Name        string            `yaml:"name"`
-	Description string            `yaml:"description,omitempty"`
-	Tracers     map[string]Tracer `yaml:"tracers,omitempty"`
-	Structs     map[string]Struct `yaml:"structs,omitempty"`
+	Name         string                 `yaml:"name"`
+	Description  string                 `yaml:"description,omitempty"`
+	Tracers      map[string]Tracer      `yaml:"tracers,omitempty"`
+	Snapshotters map[string]Snapshotter `yaml:"snapshotters,omitempty"`
+	Structs      map[string]Struct      `yaml:"structs,omitempty"`
 }
 
 func (m *GadgetMetadata) Validate(spec *ebpf.CollectionSpec) error {
@@ -91,7 +97,15 @@ func (m *GadgetMetadata) Validate(spec *ebpf.CollectionSpec) error {
 		result = multierror.Append(result, errors.New("gadget name is required"))
 	}
 
+	if len(m.Tracers) > 0 && len(m.Snapshotters) > 0 {
+		result = multierror.Append(result, errors.New("gadget cannot have tracers and snapshotters"))
+	}
+
 	if err := m.validateTracers(spec); err != nil {
+		result = multierror.Append(result, err)
+	}
+
+	if err := m.validateSnapshotters(spec); err != nil {
 		result = multierror.Append(result, err)
 	}
 
@@ -153,6 +167,28 @@ func validateTraceMap(traceMap *ebpf.MapSpec) error {
 	}
 
 	return nil
+}
+
+func (m *GadgetMetadata) validateSnapshotters(spec *ebpf.CollectionSpec) error {
+	var result error
+
+	// Temporary limitation
+	if len(m.Snapshotters) > 1 {
+		result = multierror.Append(result, errors.New("only one snapshotter is allowed"))
+	}
+
+	for name, snapshotter := range m.Snapshotters {
+		if snapshotter.StructName == "" {
+			result = multierror.Append(result, fmt.Errorf("snapshotter %q is missing structName", name))
+		}
+
+		_, ok := m.Structs[snapshotter.StructName]
+		if !ok {
+			result = multierror.Append(result, fmt.Errorf("snapshotter %q references unknown struct %q", name, snapshotter.StructName))
+		}
+	}
+
+	return result
 }
 
 func (m *GadgetMetadata) validateStructs(spec *ebpf.CollectionSpec) error {
