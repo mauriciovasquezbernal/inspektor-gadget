@@ -52,8 +52,9 @@ func (g *GadgetDesc) Category() string {
 }
 
 func (g *GadgetDesc) Type() gadgets.GadgetType {
-	// Currently trace only
-	return gadgets.TypeTrace
+	// Placeholder for gadget type. The actual type is determined at runtime by using
+	// GetGadgetInfo()
+	return gadgets.TypeRun
 }
 
 func (g *GadgetDesc) Description() string {
@@ -81,6 +82,17 @@ func (g *GadgetDesc) ParamDescs() params.ParamDescs {
 
 func (g *GadgetDesc) Parser() parser.Parser {
 	return nil
+}
+
+// getGadgetType returns the type of the gadget according to the gadget being run.
+func getGadgetType(spec *ebpf.CollectionSpec,
+	gadgetMetadata *types.GadgetMetadata,
+) (gadgets.GadgetType, error) {
+	if t := getTracerMap(spec, gadgetMetadata); t != nil {
+		return gadgets.TypeTrace, nil
+	}
+
+	return gadgets.TypeUnknown, fmt.Errorf("unknown gadget type")
 }
 
 func getGadgetInfo(params *params.Params, args []string, logger logger.Logger) (*types.GadgetInfo, error) {
@@ -121,6 +133,11 @@ func getGadgetInfo(params *params.Params, args []string, logger logger.Logger) (
 				return nil, fmt.Errorf("gadget metadata is not valid: %w", err)
 			}
 		}
+	}
+
+	ret.GadgetType, err = getGadgetType(spec, ret.GadgetMetadata)
+	if err != nil {
+		return nil, err
 	}
 
 	return ret, nil
