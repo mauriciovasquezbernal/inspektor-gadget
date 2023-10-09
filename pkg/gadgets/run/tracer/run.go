@@ -339,13 +339,9 @@ func (g *GadgetDesc) getColumns(info *types.GadgetInfo) (*columns.Columns[types.
 		return nil, fmt.Errorf("getting value struct: %w", err)
 	}
 
-	cols := types.GetColumns()
+	eventStruct := gadgetMetadata.Structs[eventType.Name]
 
-	var traceMap *types.TraceMaps
-	for _, m := range gadgetMetadata.TraceMaps {
-		traceMap = &m
-	}
-	eventStruct := gadgetMetadata.Structs[traceMap.StructName]
+	cols := types.GetColumns()
 
 	members := map[string]btf.Member{}
 	for _, member := range eventType.Members {
