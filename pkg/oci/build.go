@@ -49,6 +49,8 @@ type BuildGadgetImageOpts struct {
 	EBPFObjectPaths map[string]string
 	// Path to the metadata file.
 	MetadataPath string
+	// Optional path to the Wasm file
+	WasmObjectPath string
 	// If true, the metadata is updated to follow changes in the eBPF objects.
 	UpdateMetadata bool
 	// If true, the metadata is validated before creating the image.
@@ -205,6 +207,13 @@ func createImageIndex(ctx context.Context, target oras.Target, o *BuildGadgetIma
 		manifestDesc, err := createManifestForTarget(ctx, target, o.MetadataPath, path, arch)
 		if err != nil {
 			return ocispec.Descriptor{}, fmt.Errorf("creating %s manifest: %w", arch, err)
+		}
+		layers = append(layers, manifestDesc)
+	}
+	if o.WasmObjectPath != "" {
+		manifestDesc, err := createManifestForTarget(ctx, target, o.MetadataPath, o.WasmObjectPath, "wasm")
+		if err != nil {
+			return ocispec.Descriptor{}, fmt.Errorf("creating %s manifest: %w", "wasm", err)
 		}
 		layers = append(layers, manifestDesc)
 	}
