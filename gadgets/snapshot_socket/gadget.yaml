@@ -1,0 +1,28 @@
+name: 'TODO: Fill the gadget name'
+description: 'TODO: Fill the gadget description'
+snapshotters:
+  sockets:
+    programName: fooo
+    structName: socket_entry
+structs:
+  socket_entry:
+    fields:
+    - name: src
+      attributes:
+        min_width: 24
+        max_width: 50
+    - name: dst
+      attributes:
+        min_width: 24
+        max_width: 50
+    - name: state
+      attributes:
+        width: 16
+        alignment: left
+        ellipsis: end
+    - name: ino
+      attributes:
+        width: 16
+        alignment: left
+        ellipsis: end
+        visible: false
