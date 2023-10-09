@@ -1,0 +1,27 @@
+name: 'TODO: Fill the gadget name'
+description: 'TODO: Fill the gadget description'
+snapshotters:
+  processes:
+    programName: ig_snap_proc
+    structName: process_entry
+structs:
+  process_entry:
+    fields:
+    - name: tgid
+      attributes:
+         template: pid
+    - name: pid
+      attributes:
+         template: pid
+    - name: ppid
+      attributes:
+         template: pid
+    - name: comm
+      attributes:
+         template: comm
+    - name: uid
+      attributes:
+        template: uid
+    - name: gid
+      attributes:
+        template: gid
