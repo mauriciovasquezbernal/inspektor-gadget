@@ -11,4 +11,9 @@
 #define GADGET_TRACE_MAP(name) \
 	const void * gadget_trace_map_##name __attribute__((unused));
 
+// TODO: description
+// Tells Inspektor Gadget that "type" is produced by the iterator program.
+#define GADGET_ITER_TYPE(type) \
+	const struct type *gadget_iter_type __attribute__((unused));
+
 #endif /* __MACROS_H */
