@@ -47,4 +47,7 @@ const (
 
 	// Prefix used to mark trace maps
 	TraceMapPrefix = "gadget_trace_map_"
+
+	// Prefix used to mark snapshotters structs
+	SnapshottersPrefix = "gadget_snapshotter_"
 )

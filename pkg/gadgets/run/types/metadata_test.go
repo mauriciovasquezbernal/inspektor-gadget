@@ -397,8 +397,6 @@ func TestPopulate(t *testing.T) {
 			expectedMetadata: &GadgetMetadata{
 				Name:        "TODO: Fill the gadget name",
 				Description: "TODO: Fill the gadget description",
-				Tracers:     map[string]Tracer{},
-				Structs:     map[string]Struct{},
 			},
 		},
 		"wrong_map_type": {
