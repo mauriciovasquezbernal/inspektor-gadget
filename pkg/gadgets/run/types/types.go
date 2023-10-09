@@ -127,10 +127,17 @@ type Struct struct {
 type TraceMaps struct {
 	StructName string `yaml:"structName"`
 }
+
+type Iterator struct {
+	ProgramName string `yaml:"programName"`
+	StructName  string `yaml:"structName"`
+}
+
 type GadgetMetadata struct {
 	Name        string               `yaml:"name"`
 	Description string               `yaml:"description,omitempty"`
 	TraceMaps   map[string]TraceMaps `yaml:"traceMaps,omitempty"`
+	Iterators   map[string]Iterator  `yaml:"iterators,omitempty"`
 	Structs     map[string]Struct    `yaml:"structs,omitempty"`
 }
 
