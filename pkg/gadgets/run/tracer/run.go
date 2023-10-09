@@ -92,6 +92,10 @@ func getGadgetType(spec *ebpf.CollectionSpec,
 		return gadgets.TypeTrace, nil
 	}
 
+	if t := getSnapshotterType(spec, gadgetMetadata); t != nil {
+		return gadgets.TypeOneShot, nil
+	}
+
 	return gadgets.TypeUnknown, fmt.Errorf("unknown gadget type")
 }
 
@@ -177,6 +181,26 @@ func getTracerMap(spec *ebpf.CollectionSpec, gadgetMetadata *types.GadgetMetadat
 	return traceMap
 }
 
+// getSnapshotterType looks for the structure used by the snapshotters. If none is found, nil is
+// returned.
+func getSnapshotterType(spec *ebpf.CollectionSpec, gadgetMetadata *types.GadgetMetadata) *btf.Struct {
+	var snapshotterTypeName string
+	var btfStruct *btf.Struct
+
+	for _, it := range gadgetMetadata.Snapshotters {
+		snapshotterTypeName = it.StructName
+		break
+	}
+
+	if snapshotterTypeName == "" {
+		return nil
+	}
+
+	spec.Types.TypeByName(snapshotterTypeName, &btfStruct)
+
+	return btfStruct
+}
+
 func getEventTypeBTF(info *types.GadgetInfo) (*btf.Struct, error) {
 	spec, err := loadSpec(info.ProgContent)
 	if err != nil {
@@ -196,6 +220,12 @@ func getEventTypeBTF(info *types.GadgetInfo) (*btf.Struct, error) {
 		}
 
 		return valueStruct, nil
+	}
+
+	// Look for snaphotters
+	iterType := getSnapshotterType(spec, info.GadgetMetadata)
+	if iterType != nil {
+		return iterType, nil
 	}
 
 	return nil, fmt.Errorf("the gadget doesn't provide any compatible way to show information")
