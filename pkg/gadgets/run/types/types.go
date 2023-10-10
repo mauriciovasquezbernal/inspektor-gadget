@@ -129,6 +129,10 @@ type TraceMaps struct {
 	StructName string `yaml:"structName"`
 }
 
+type StatsMaps struct {
+	StructName string `yaml:"structName"`
+}
+
 type Iterator struct {
 	ProgramName string `yaml:"programName"`
 	StructName  string `yaml:"structName"`
@@ -138,6 +142,7 @@ type GadgetMetadata struct {
 	Name        string               `yaml:"name"`
 	Description string               `yaml:"description,omitempty"`
 	TraceMaps   map[string]TraceMaps `yaml:"traceMaps,omitempty"`
+	StatsMaps   map[string]StatsMaps `yaml:"statsMaps,omitempty"`
 	Iterators   map[string]Iterator  `yaml:"iterators,omitempty"`
 	Structs     map[string]Struct    `yaml:"structs,omitempty"`
 }
@@ -165,6 +170,35 @@ func (g *GadgetMetadata) validateTraceMaps(spec *ebpf.CollectionSpec) error {
 			result = multierror.Append(result, fmt.Errorf("trace map %q not found in eBPF object", name))
 		} else if ebpfm.Type != ebpf.RingBuf && ebpfm.Type != ebpf.PerfEventArray {
 			result = multierror.Append(result, fmt.Errorf("trace map %q is not a ringbuf or perf event array", name))
+		}
+	}
+
+	return result
+}
+
+func (g *GadgetMetadata) validateStatsMaps(spec *ebpf.CollectionSpec) error {
+	var result error
+
+	// Temporal limitation
+	if len(g.StatsMaps) > 1 {
+		return fmt.Errorf("only one stats map is allowed, found %d", len(g.StatsMaps))
+	}
+
+	for name, m := range g.StatsMaps {
+		if m.StructName == "" {
+			result = multierror.Append(result, fmt.Errorf("%q is missing structName", name))
+		}
+
+		_, ok := g.Structs[m.StructName]
+		if !ok {
+			result = multierror.Append(result, fmt.Errorf("%q references unknown struct %q", name, m.StructName))
+		}
+
+		ebpfm, ok := spec.Maps[name]
+		if !ok {
+			result = multierror.Append(result, fmt.Errorf("%q not found in eBPF object", name))
+		} else if ebpfm.Type != ebpf.Hash {
+			result = multierror.Append(result, fmt.Errorf("%q must be a hash map", name))
 		}
 	}
 
@@ -227,7 +261,9 @@ func (g *GadgetMetadata) Validate(spec *ebpf.CollectionSpec) error {
 	if err := g.validateTraceMaps(spec); err != nil {
 		result = multierror.Append(result, err)
 	}
-
+	if err := g.validateStatsMaps(spec); err != nil {
+		result = multierror.Append(result, err)
+	}
 	if err := g.validateStructs(spec); err != nil {
 		result = multierror.Append(result, err)
 	}

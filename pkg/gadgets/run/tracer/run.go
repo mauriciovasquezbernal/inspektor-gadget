@@ -85,6 +85,10 @@ func (g *GadgetDesc) getGadgetType(spec *ebpf.CollectionSpec,
 		return gadgets.TypeTrace, nil
 	}
 
+	if t := getStatsMap(spec, gadgetMetadata); t != nil {
+		return gadgets.TypeTraceIntervals, nil
+	}
+
 	if t := getIterType(spec, gadgetMetadata); t != nil {
 		return gadgets.TypeOneShot, nil
 	}
@@ -163,6 +167,16 @@ func getTraceMap(spec *ebpf.CollectionSpec, gadgetMetadata *types.GadgetMetadata
 	return traceMap
 }
 
+// getStatsMap returns the stats map as defined in gadgetMetadata. If not found returns nil.
+func getStatsMap(spec *ebpf.CollectionSpec, gadgetMetadata *types.GadgetMetadata) *ebpf.MapSpec {
+	var traceMap *ebpf.MapSpec
+	// We are limiting the number of stats maps to 1 for now
+	for name := range gadgetMetadata.StatsMaps {
+		return spec.Maps[name]
+	}
+	return traceMap
+}
+
 // getIterType looks for the structure used by the iterator programs. If none is found, nil is
 // returned.
 func getIterType(spec *ebpf.CollectionSpec, gadgetMetadata *types.GadgetMetadata) *btf.Struct {
@@ -195,6 +209,17 @@ func getEventTypeBTF(info *types.GadgetInfo) (*btf.Struct, error) {
 		valueStruct, ok := traceMap.Value.(*btf.Struct)
 		if !ok {
 			return nil, fmt.Errorf("BPF map %q does not have BTF info for values", traceMap.Name)
+		}
+
+		return valueStruct, nil
+	}
+
+	// Look for stats maps
+	statsMap := getStatsMap(spec, info.GadgetMetadata)
+	if statsMap != nil {
+		valueStruct, ok := statsMap.Value.(*btf.Struct)
+		if !ok {
+			return nil, fmt.Errorf("BPF map %q does not have BTF info for values", statsMap.Name)
 		}
 
 		return valueStruct, nil

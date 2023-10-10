@@ -24,6 +24,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -92,6 +93,9 @@ type Tracer struct {
 	// Iterators related
 	linksIter []*linkIter
 
+	// Toppers related
+	statsMap *ebpf.Map
+
 	containers map[string]*containercollection.Container
 }
 
@@ -148,17 +152,17 @@ func (t *Tracer) Stop() {
 	}
 }
 
-func (t *Tracer) handleTraceMap() (*ebpf.MapSpec, error) {
-	// If the gadget doesn't provide a map it's not an error becuase it could provide other ways
+func (t *Tracer) handleTraceMap() (string, error) {
+	// If the gadget doesn't provide a map it's not an error because it could provide other ways
 	// to output data
 	traceMap := getTraceMap(t.spec, t.config.Metadata)
 	if traceMap == nil {
-		return nil, nil
+		return "", nil
 	}
 
 	eventType, ok := traceMap.Value.(*btf.Struct)
 	if !ok {
-		return nil, fmt.Errorf("BPF map %q does not have BTF info for values", traceMap.Name)
+		return "", fmt.Errorf("BPF map %q does not have BTF info for values", traceMap.Name)
 	}
 	t.eventType = eventType
 
@@ -172,7 +176,24 @@ func (t *Tracer) handleTraceMap() (*ebpf.MapSpec, error) {
 		traceMap.ValueSize = 4
 	}
 
-	return traceMap, nil
+	return traceMap.Name, nil
+}
+
+func (t *Tracer) handleStatsMap() (string, error) {
+	// If the gadget doesn't provide a map it's not an error because it could
+	// provide other ways to output data.
+	statsMap := getStatsMap(t.spec, t.config.Metadata)
+	if statsMap == nil {
+		return "", nil
+	}
+
+	eventType, ok := statsMap.Value.(*btf.Struct)
+	if !ok {
+		return "", fmt.Errorf("BPF map %q does not have BTF info for values", statsMap.Name)
+	}
+	t.eventType = eventType
+
+	return statsMap.Name, nil
 }
 
 func (t *Tracer) handleIter() error {
@@ -186,19 +207,23 @@ func (t *Tracer) handleIter() error {
 }
 
 func (t *Tracer) installTracer() error {
-	// Load the spec
 	var err error
 
 	mapReplacements := map[string]*ebpf.Map{}
 	consts := map[string]interface{}{}
 
-	traceMap, err := t.handleTraceMap()
+	traceMapName, err := t.handleTraceMap()
 	if err != nil {
 		return fmt.Errorf("handling trace programs: %w", err)
 	}
 
 	if err := t.handleIter(); err != nil {
 		return fmt.Errorf("handling iterator programs: %w", err)
+	}
+
+	statsMapName, err := t.handleStatsMap()
+	if err != nil {
+		return fmt.Errorf("handling stats programs: %w", err)
 	}
 
 	if t.eventType == nil {
@@ -237,21 +262,25 @@ func (t *Tracer) installTracer() error {
 	}
 	t.collection, err = ebpf.NewCollectionWithOptions(t.spec, opts)
 	if err != nil {
-		return fmt.Errorf("create BPF collection: %w", err)
+		return fmt.Errorf("creating BPF collection: %w", err)
 	}
 
 	// Some logic before loading the programs
-	if traceMap != nil {
-		m := t.collection.Maps[traceMap.Name]
+	if traceMapName != "" {
+		m := t.collection.Maps[traceMapName]
 		switch m.Type() {
 		case ebpf.RingBuf:
-			t.ringbufReader, err = ringbuf.NewReader(t.collection.Maps[traceMap.Name])
+			t.ringbufReader, err = ringbuf.NewReader(m)
 		case ebpf.PerfEventArray:
-			t.perfReader, err = perf.NewReader(t.collection.Maps[traceMap.Name], gadgets.PerfBufferPages*os.Getpagesize())
+			t.perfReader, err = perf.NewReader(m, gadgets.PerfBufferPages*os.Getpagesize())
 		}
 		if err != nil {
-			return fmt.Errorf("create BPF map reader: %w", err)
+			return fmt.Errorf("creating BPF map reader: %w", err)
 		}
+	}
+
+	if statsMapName != "" {
+		t.statsMap = t.collection.Maps[statsMapName]
 	}
 
 	// Attach programs
@@ -260,20 +289,20 @@ func (t *Tracer) installTracer() error {
 		if p.Type == ebpf.Kprobe && strings.HasPrefix(p.SectionName, "kprobe/") {
 			l, err := link.Kprobe(p.AttachTo, t.collection.Programs[progName], nil)
 			if err != nil {
-				return fmt.Errorf("attach BPF program %q: %w", progName, err)
+				return fmt.Errorf("attaching BPF program %q: %w", progName, err)
 			}
 			t.links = append(t.links, l)
 		} else if p.Type == ebpf.Kprobe && strings.HasPrefix(p.SectionName, "kretprobe/") {
 			l, err := link.Kretprobe(p.AttachTo, t.collection.Programs[progName], nil)
 			if err != nil {
-				return fmt.Errorf("attach BPF program %q: %w", progName, err)
+				return fmt.Errorf("attaching BPF program %q: %w", progName, err)
 			}
 			t.links = append(t.links, l)
 		} else if p.Type == ebpf.TracePoint && strings.HasPrefix(p.SectionName, "tracepoint/") {
 			parts := strings.Split(p.AttachTo, "/")
 			l, err := link.Tracepoint(parts[0], parts[1], t.collection.Programs[progName], nil)
 			if err != nil {
-				return fmt.Errorf("attach BPF program %q: %w", progName, err)
+				return fmt.Errorf("attaching BPF program %q: %w", progName, err)
 			}
 			t.links = append(t.links, l)
 		} else if p.Type == ebpf.SocketFilter && strings.HasPrefix(p.SectionName, "socket") {
@@ -329,7 +358,7 @@ func (t *Tracer) processEventFunc(gadgetCtx gadgets.GadgetContext) func(data []b
 
 	endpointDefs := []endpointDef{}
 
-	// The same same data structure is always sent, so we can precalculate the offsets for
+	// The same data structure is always sent, so we can precalculate the offsets for
 	// different fields like mount ns id, endpoints, etc.
 	for _, member := range typ.Members {
 		switch member.Type.TypeName() {
@@ -566,6 +595,97 @@ func (t *Tracer) runIter(gadgetCtx gadgets.GadgetContext) error {
 	return nil
 }
 
+func (t *Tracer) nextStats(gadgetCtx gadgets.GadgetContext) ([]*types.Event, error) {
+	stats := []*types.Event{}
+	entries := t.statsMap
+
+	defer func() {
+		// Delete elements. TODO: We should ensure to delete only the elements
+		// we read to avoid deleting elements that are not read yet.
+		key, err := entries.NextKeyBytes(nil)
+		if err != nil {
+			gadgetCtx.Logger().Warnf("couldn't get first key to delete: %v", err)
+			return
+		}
+		if key == nil {
+			// Map is empty
+			return
+		}
+
+		for {
+			if err := entries.Delete(key); err != nil {
+				gadgetCtx.Logger().Warnf("couldn't delete value from key: %v", err)
+				return
+			}
+			key, err = entries.NextKeyBytes(key)
+			if err != nil {
+				return
+			}
+			if key == nil {
+				// No more keys
+				break
+			}
+		}
+	}()
+
+	// Gather elements: Start by getting the first key
+	key, err := entries.NextKeyBytes(nil)
+	if err != nil {
+		return nil, fmt.Errorf("getting fist key: %w", err)
+	}
+	if key == nil {
+		// Map is empty
+		return stats, nil
+	}
+
+	// Now iterate over all keys
+	cb := t.processEventFunc(gadgetCtx)
+	for {
+		var rawStat []byte
+		rawStat, err := entries.LookupBytes(key)
+		if err != nil {
+			return nil, fmt.Errorf("looking up value from key: %w", err)
+		}
+
+		stats = append(stats, cb(rawStat))
+
+		key, err = entries.NextKeyBytes(key)
+		if err != nil {
+			return nil, fmt.Errorf("getting next key: %w", err)
+		}
+		if key == nil {
+			// No more keys
+			break
+		}
+	}
+
+	// TODO: How can we sort? Data is still in a raw format by this point.
+	// top.SortStats(stats, t.config.SortBy, &t.colMap)
+
+	return stats, nil
+}
+
+func (t *Tracer) runStats(gadgetCtx gadgets.GadgetContext) error {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+
+	ctx := gadgetCtx.Context()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-ticker.C:
+			stats, err := t.nextStats(gadgetCtx)
+			if err != nil {
+				return fmt.Errorf("getting next stats: %w", err)
+			}
+
+			t.eventArrayCallback(stats)
+		}
+	}
+}
+
 func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 	params := gadgetCtx.GadgetParams()
 	args := gadgetCtx.Args()
@@ -605,15 +725,19 @@ func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 
 	if err := t.installTracer(); err != nil {
 		t.Stop()
-		return fmt.Errorf("install tracer: %w", err)
+		return fmt.Errorf("installing tracer: %w", err)
 	}
 
 	if t.perfReader != nil || t.ringbufReader != nil {
 		go t.runTracers(gadgetCtx)
 	}
+	if t.statsMap != nil {
+		go t.runStats(gadgetCtx)
+	}
 	if len(t.linksIter) > 0 {
 		return t.runIter(gadgetCtx)
 	}
+
 	gadgetcontext.WaitForTimeoutOrDone(gadgetCtx)
 
 	return nil
