@@ -90,6 +90,7 @@ func getGadgetInfo(params *params.Params, args []string, logger logger.Logger) (
 
 	ret := &types.GadgetInfo{
 		ProgContent:    gadget.EbpfObject,
+		WasmContent:    gadget.WasmObject,
 		GadgetMetadata: &types.GadgetMetadata{},
 	}
 

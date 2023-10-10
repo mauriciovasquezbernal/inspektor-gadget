@@ -120,6 +120,7 @@ func (g *GadgetFeatures) String() string {
 type GadgetInfo struct {
 	GadgetMetadata            *GadgetMetadata
 	ProgContent               []byte
+	WasmContent               []byte
 	GadgetType                gadgets.GadgetType
 	Features                  GadgetFeatures
 	OperatorsParamsCollection params.DescCollection
