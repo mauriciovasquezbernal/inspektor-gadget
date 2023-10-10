@@ -88,6 +88,7 @@ type Printer interface {
 type GadgetInfo struct {
 	GadgetMetadata *GadgetMetadata
 	ProgContent    []byte
+	WasmContent    []byte
 	GadgetType     gadgets.GadgetType
 }
 
