@@ -1,0 +1,51 @@
+name: file
+description: Periodically report read/write activity by file
+statsMaps:
+  stats:
+    structName: file_stat
+structs:
+  file_stat:
+    fields:
+    - name: pid
+      template: pid
+      order: 1000
+      visible: true
+    - name: tid
+      template: pid
+      order: 1001
+      visible: false
+    - name: comm
+      template: comm
+      width: 16
+      order: 1002
+      visible: true
+    - name: reads
+      width: 8
+      order: 1003
+      visible: true
+    - name: writes
+      width: 8
+      order: 1004
+      visible: true
+    - name: rbytes
+      width: 8
+      order: 1005
+      visible: true
+    - name: wbytes
+      width: 8
+      order: 1006
+      visible: true
+    - name: t
+      order: 1007
+      width: 1
+      max_width: 1
+      visible: true
+    - name: file
+      width: 30
+      order: 1008
+      visible: true
+    - name: mntns_id
+      min_width: 24
+      width: 32
+      order: 1009
+      visible: false
