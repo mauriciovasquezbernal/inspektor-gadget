@@ -24,6 +24,7 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -440,8 +441,17 @@ func (t *Tracer) processEventFunc(gadgetCtx gadgets.GadgetContext) func(data []b
 			timestamps = append(timestamps, t)
 		}
 
+		// TODO: this is kinda duplicated with logic in GetGadgetInfo. See comment there.
 		blob := types.NewBlobEvent()
+		_, int32set := blob.AddInt32("myint32")
+		_, dateset := blob.AddString("date")
+		_, stringset := blob.AddString("string")
+
 		blob.Allocate()
+
+		int32set(blob, 5555)
+		dateset(blob, time.Now().String())
+		stringset(blob, "hello world")
 
 		// set ebpf data
 		b := blob.Blob()
