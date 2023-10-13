@@ -16,7 +16,6 @@ const volatile pid_t targ_pid = 0;
 const volatile pid_t targ_tgid = 0;
 const volatile uid_t targ_uid = INVALID_UID;
 const volatile bool targ_failed = false;
-const volatile bool get_full_path = false;
 const volatile __u32 prefixes_nr = 0;
 
 // we need this to make sure the compiler doesn't remove our struct
@@ -24,7 +23,11 @@ const struct event *unusedevent __attribute__((unused));
 
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
+#ifdef WITH_FULL_PATH
 	__uint(max_entries, 1024);
+#else /* !WITH_FULL_PATH */
+	__uint(max_entries, 10240);
+#endif /* !WITH_FULL_PATH */
 	__type(key, u32);
 	__type(value, struct event);
 } start SEC(".maps");
@@ -175,8 +178,9 @@ static __always_inline int trace_exit(struct trace_event_raw_sys_exit *ctx)
 	u32 pid = bpf_get_current_pid_tgid();
 	u64 uid_gid = bpf_get_current_uid_gid();
 	u64 mntns_id;
+#ifdef WITH_FULL_PATH
 	size_t full_fname_len = 0;
-
+#endif /* WITH_FULL_PATH */
 	event = bpf_map_lookup_elem(&start, &pid);
 	if (!event)
 		return 0; /* missed entry */
@@ -194,8 +198,9 @@ static __always_inline int trace_exit(struct trace_event_raw_sys_exit *ctx)
 	event->mntns_id = gadget_get_mntns_id();
 	event->timestamp = bpf_ktime_get_boot_ns();
 
+#ifdef WITH_FULL_PATH
 	// Attempting to extract the full file path with symlink resolution
-	if (ret >= 0 && get_full_path) {
+	if (ret >= 0) {
 		long r = read_full_path_of_open_file_fd(
 			ret, (char *)event->full_fname,
 			sizeof(event->full_fname));
@@ -211,12 +216,17 @@ static __always_inline int trace_exit(struct trace_event_raw_sys_exit *ctx)
 		event->full_fname[0] = '\0';
 		full_fname_len = 1;
 	}
+#endif /* WITH_FULL_PATH */
 
 	/* emit event */
+#ifdef WITH_FULL_PATH
 	bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, event,
 			      sizeof(struct event) -
 				      (PATH_MAX - full_fname_len));
-
+#else /* !WITH_FULL_PATH */
+	bpf_perf_event_output(ctx, &events, BPF_F_CURRENT_CPU, event,
+			      sizeof(struct event));
+#endif /* !WITH_FULL_PATH */
 cleanup:
 	bpf_map_delete_elem(&start, &pid);
 	return 0;

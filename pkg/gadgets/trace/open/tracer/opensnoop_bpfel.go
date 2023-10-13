@@ -24,7 +24,6 @@ type opensnoopEvent struct {
 	Mode      uint16
 	Comm      [16]uint8
 	Fname     [255]uint8
-	FullFname [4096]uint8
 	_         [7]byte
 }
 

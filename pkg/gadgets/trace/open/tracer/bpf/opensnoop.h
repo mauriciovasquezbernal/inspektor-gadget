@@ -19,8 +19,10 @@ struct event {
 	__u16 mode;
 	__u8 comm[TASK_COMM_LEN];
 	__u8 fname[NAME_MAX];
+#ifdef WITH_FULL_PATH
 	// Keep full_fname as the last field for optimization
 	__u8 full_fname[PATH_MAX];
+#endif /* WITH_FULL_PATH */
 };
 
 struct prefix_key {

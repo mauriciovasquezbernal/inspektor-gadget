@@ -35,6 +35,7 @@ import (
 )
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -no-global-types -target bpfel -cc clang -cflags ${CFLAGS} -type event -type prefix_key opensnoop ./bpf/opensnoop.bpf.c -- -I./bpf/
+//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -no-global-types -target bpfel -cc clang -cflags ${CFLAGS} -type event -type prefix_key opensnoopWithFullPath ./bpf/opensnoop.bpf.c -- -DWITH_FULL_PATH -I./bpf/
 
 const (
 	// Keep in sync with opensnoop.h.
@@ -101,7 +102,14 @@ func (t *Tracer) close() {
 }
 
 func (t *Tracer) install() error {
-	spec, err := loadOpensnoop()
+	var spec *ebpf.CollectionSpec
+	var err error
+
+	if t.config.FullPath {
+		spec, err = loadOpensnoopWithFullPath()
+	} else {
+		spec, err = loadOpensnoop()
+	}
 	if err != nil {
 		return fmt.Errorf("loading ebpf program: %w", err)
 	}
@@ -113,7 +121,6 @@ func (t *Tracer) install() error {
 	}
 
 	consts := make(map[string]interface{})
-	consts["get_full_path"] = t.config.FullPath
 	consts["prefixes_nr"] = prefixesNumber
 
 	for _, prefix := range t.config.Prefixes {
@@ -139,7 +146,7 @@ func (t *Tracer) install() error {
 		return fmt.Errorf("loading ebpf spec: %w", err)
 	}
 
-	// arm64 does not defined an open() syscall, only openat().
+	// arm64 does not define the open() syscall, only openat().
 	if runtime.GOARCH != "arm64" {
 		openEnter, err := link.Tracepoint("syscalls", "sys_enter_open", t.objs.IgOpenE, nil)
 		if err != nil {
@@ -229,7 +236,11 @@ func (t *Tracer) run() {
 			ModeRaw:       mode,
 			Mode:          mode.String(),
 			Path:          gadgets.FromCString(bpfEvent.Fname[:]),
-			FullPath:      gadgets.FromCString(bpfEvent.FullFname[:]),
+		}
+
+		if t.config.FullPath {
+			bpfEventWithFullPath:= (*opensnoopWithFullPathEvent)(unsafe.Pointer(&record.RawSample[0]))
+			event.FullPath = gadgets.FromCString(bpfEventWithFullPath.FullFname[:])
 		}
 
 		if t.enricher != nil {
