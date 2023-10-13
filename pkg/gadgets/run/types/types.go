@@ -53,7 +53,9 @@ type Event struct {
 	NetNsID   uint64 `json:"-"`
 
 	// Raw event sent by the ebpf program
-	RawData []byte `json:"raw_data,omitempty"`
+	//RawData []byte `json:"raw_data,omitempty"`
+
+	Blob [][]byte `json:"blob,omitempty"`
 }
 
 func (ev *Event) GetMountNSID() uint64 {
@@ -117,8 +119,23 @@ func (g *GadgetFeatures) String() string {
 	return ret
 }
 
+type Type struct {
+	Name string
+	Size int // 0 means simple type, >0 means array of Name with Size elements
+}
+
+// Column describes how a column is built. It's basically a serializable version of
+// columns.DynamicField
+type ColumnDesc struct {
+	Name   string
+	Index  int // -1: virtual, 0: ebpf, 1: fixed length, 1+ strings
+	Type   Type
+	Offset uintptr
+}
+
 type GadgetInfo struct {
 	GadgetMetadata            *GadgetMetadata
+	Columns                   []ColumnDesc
 	ProgContent               []byte
 	WasmContent               []byte
 	GadgetType                gadgets.GadgetType

@@ -16,9 +16,9 @@ package tracer
 
 import (
 	"fmt"
+	"reflect"
 	"unsafe"
 
-	"github.com/cilium/ebpf/btf"
 	log "github.com/sirupsen/logrus"
 	k8syaml "sigs.k8s.io/yaml"
 
@@ -107,6 +107,49 @@ func (g *GadgetDesc) Parser() parser.Parser {
 
 func (g *GadgetDesc) GetGadgetInfo(params *params.Params, args []string) (*types.GadgetInfo, error) {
 	return getGadgetInfo(params, args, log.StandardLogger())
+}
+
+func reflectTypeFromType(typ types.Type) reflect.Type {
+	if typ.Size != 0 {
+		arrType := simpleReflectTypeFromType(typ)
+		if arrType == nil {
+			return nil
+		}
+		return reflect.ArrayOf(typ.Size, arrType)
+	}
+
+	return simpleReflectTypeFromType(typ)
+}
+
+func simpleReflectTypeFromType(typ types.Type) reflect.Type {
+	switch typ.Name {
+	case "int8":
+		return reflect.TypeOf(int8(0))
+	case "int16":
+		return reflect.TypeOf(int16(0))
+	case "int32":
+		return reflect.TypeOf(int32(0))
+	case "int64":
+		return reflect.TypeOf(int64(0))
+	case "uint8":
+		return reflect.TypeOf(uint8(0))
+	case "uint16":
+		return reflect.TypeOf(uint16(0))
+	case "uint32":
+		return reflect.TypeOf(uint32(0))
+	case "uint64":
+		return reflect.TypeOf(uint64(0))
+	case "float32":
+		return reflect.TypeOf(float32(0))
+	case "float64":
+		return reflect.TypeOf(float64(0))
+	case "bool":
+		return reflect.TypeOf(false)
+	case "string":
+		return reflect.TypeOf("")
+	}
+
+	return nil
 }
 
 func addL3EndpointColumns(
@@ -218,15 +261,10 @@ func field2ColumnAttrs(field *types.Field) columns.Attributes {
 }
 
 func (g *GadgetDesc) getColumns(info *types.GadgetInfo) (*columns.Columns[types.Event], error) {
-	gadgetMetadata := info.GadgetMetadata
-	eventType, err := getEventTypeBTF(info.ProgContent, gadgetMetadata)
-	if err != nil {
-		return nil, fmt.Errorf("getting value struct: %w", err)
-	}
 
-	eventStruct, ok := gadgetMetadata.Structs[eventType.Name]
-	if !ok {
-		return nil, fmt.Errorf("struct %s not found in gadget metadata", eventType.Name)
+	_, eventStruct := getAnyMapElem(info.GadgetMetadata.Structs)
+	if eventStruct == nil {
+		return nil, fmt.Errorf("struct not found in gadget metadata")
 	}
 
 	cols := types.GetColumns()
@@ -252,102 +290,130 @@ func (g *GadgetDesc) getColumns(info *types.GadgetInfo) (*columns.Columns[types.
 		}
 	}
 
-	members := map[string]btf.Member{}
-	for _, member := range eventType.Members {
-		members[member.Name] = member
-	}
-
-	fields := []columns.DynamicField{}
+	ebpfFields := []columns.DynamicField{}
+	blobFields := []columns.DynamicField{}
 
 	l3endpointCounter := 0
 	l4endpointCounter := 0
 	timestampsCounter := 0
 
-	for i, field := range eventStruct.Fields {
-		member := members[field.Name]
+	fields := map[string]types.Field{}
+	for _, field := range eventStruct.Fields {
+		fields[field.Name] = field
+	}
+
+	for i, col := range info.Columns {
+		field, ok := fields[col.Name]
+		if !ok {
+			continue
+		}
 
 		attrs := field2ColumnAttrs(&field)
 		attrs.Order = 1000 + i
 
-		switch member.Type.TypeName() {
-		case types.L3EndpointTypeName:
-			// Take the value here, otherwise it'll use the wrong value after
-			// it's increased
-			index := l3endpointCounter
-			// Add the column that is enriched
-			eventtypes.MustAddVirtualL3EndpointColumn(cols, attrs, func(e *types.Event) eventtypes.L3Endpoint {
-				if len(e.L3Endpoints) == 0 {
-					return eventtypes.L3Endpoint{}
+		switch col.Index {
+		case -1:
+			typeName := col.Type.Name
+			switch typeName {
+			case "l3endpoint":
+				// Take the value here, otherwise it'll use the wrong value after
+				// it's increased
+				index := l3endpointCounter
+				// Add the column that is enriched
+				eventtypes.MustAddVirtualL3EndpointColumn(cols, attrs, func(e *types.Event) eventtypes.L3Endpoint {
+					if len(e.L3Endpoints) == 0 {
+						return eventtypes.L3Endpoint{}
+					}
+					return e.L3Endpoints[index].L3Endpoint
+				})
+				// Add a single column for each field in the endpoint
+				addL3EndpointColumns(cols, col.Name, func(e *types.Event) eventtypes.L3Endpoint {
+					if len(e.L3Endpoints) == 0 {
+						return eventtypes.L3Endpoint{}
+					}
+					return e.L3Endpoints[index].L3Endpoint
+				})
+				l3endpointCounter++
+			case "l4endpoint":
+				// Take the value here, otherwise it'll use the wrong value after
+				// it's increased
+				index := l4endpointCounter
+				// Add the column that is enriched
+				eventtypes.MustAddVirtualL4EndpointColumn(cols, attrs, func(e *types.Event) eventtypes.L4Endpoint {
+					if len(e.L4Endpoints) == 0 {
+						return eventtypes.L4Endpoint{}
+					}
+					return e.L4Endpoints[index].L4Endpoint
+				})
+				// Add a single column for each field in the endpoint
+				addL4EndpointColumns(cols, col.Name, func(e *types.Event) eventtypes.L4Endpoint {
+					if len(e.L4Endpoints) == 0 {
+						return eventtypes.L4Endpoint{}
+					}
+					return e.L4Endpoints[index].L4Endpoint
+				})
+				l4endpointCounter++
+			case "timestamp":
+				// Take the value here, otherwise it'll use the wrong value after
+				// it's increased
+				index := timestampsCounter
+				err := cols.AddColumn(attrs, func(e *types.Event) any {
+					if len(e.Timestamps) == 0 {
+						return ""
+					}
+					return e.Timestamps[index].String()
+				})
+				if err != nil {
+					return nil, fmt.Errorf("adding timestamp column: %w", err)
 				}
-				return e.L3Endpoints[index].L3Endpoint
-			})
-			// Add a single column for each field in the endpoint
-			addL3EndpointColumns(cols, member.Name, func(e *types.Event) eventtypes.L3Endpoint {
-				if len(e.L3Endpoints) == 0 {
-					return eventtypes.L3Endpoint{}
-				}
-				return e.L3Endpoints[index].L3Endpoint
-			})
-			l3endpointCounter++
-			continue
-		case types.L4EndpointTypeName:
-			// Take the value here, otherwise it'll use the wrong value after
-			// it's increased
-			index := l4endpointCounter
-			// Add the column that is enriched
-			eventtypes.MustAddVirtualL4EndpointColumn(cols, attrs, func(e *types.Event) eventtypes.L4Endpoint {
-				if len(e.L4Endpoints) == 0 {
-					return eventtypes.L4Endpoint{}
-				}
-				return e.L4Endpoints[index].L4Endpoint
-			})
-			// Add a single column for each field in the endpoint
-			addL4EndpointColumns(cols, member.Name, func(e *types.Event) eventtypes.L4Endpoint {
-				if len(e.L4Endpoints) == 0 {
-					return eventtypes.L4Endpoint{}
-				}
-				return e.L4Endpoints[index].L4Endpoint
-			})
-			l4endpointCounter++
-			continue
-		case types.TimestampTypeName:
-			// Take the value here, otherwise it'll use the wrong value after
-			// it's increased
-			index := timestampsCounter
-			err := cols.AddColumn(attrs, func(e *types.Event) any {
-				if len(e.Timestamps) == 0 {
+				timestampsCounter++
+				continue
+
+			}
+		case 0:
+			field := columns.DynamicField{
+				Attributes: &attrs,
+				Template:   attrs.Template,
+				Type:       reflectTypeFromType(col.Type),
+				Offset:     uintptr(col.Offset),
+			}
+
+			ebpfFields = append(ebpfFields, field)
+		case 1:
+			field := columns.DynamicField{
+				Attributes: &attrs,
+				Template:   attrs.Template,
+				Type:       reflectTypeFromType(col.Type),
+				Offset:     uintptr(col.Offset),
+			}
+			blobFields = append(blobFields, field)
+		default:
+			//fmt.Printf("handling string %q wth index %d\n", col.Name, col.Index)
+			index := col.Index
+			cols.AddColumn(attrs, func(e *types.Event) any {
+				if e.Blob == nil {
 					return ""
 				}
-				return e.Timestamps[index].String()
+
+				return string(e.Blob[index])
 			})
-			if err != nil {
-				return nil, fmt.Errorf("adding timestamp column: %w", err)
-			}
-			timestampsCounter++
-			continue
 		}
-
-		rType := getType(member.Type)
-		if rType == nil {
-			continue
-		}
-
-		field := columns.DynamicField{
-			Attributes: &attrs,
-			Template:   attrs.Template,
-			Type:       rType,
-			Offset:     uintptr(member.Offset.Bytes()),
-		}
-
-		fields = append(fields, field)
 	}
 
-	base := func(ev *types.Event) unsafe.Pointer {
-		return unsafe.Pointer(&ev.RawData[0])
+	ebpfBase := func(ev *types.Event) unsafe.Pointer {
+		return unsafe.Pointer(&ev.Blob[0][0])
 	}
-	if err := cols.AddFields(fields, base); err != nil {
+	if err := cols.AddFields(ebpfFields, ebpfBase); err != nil {
 		return nil, fmt.Errorf("adding fields: %w", err)
 	}
+
+	blobBase := func(ev *types.Event) unsafe.Pointer {
+		return unsafe.Pointer(&ev.Blob[1][0])
+	}
+	if err := cols.AddFields(blobFields, blobBase); err != nil {
+		return nil, fmt.Errorf("adding blob fields: %w", err)
+	}
+
 	return cols, nil
 }
 

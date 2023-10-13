@@ -129,6 +129,11 @@ func getGadgetInfo(params *params.Params, args []string, logger logger.Logger) (
 		return nil, err
 	}
 
+	ret.Columns, err = calculateColumnsForClient(ret.GadgetMetadata, gadget.EbpfObject)
+	if err != nil {
+		return nil, err
+	}
+
 	ret.Features, err = getGadgetFeatures(spec, ret)
 	if err != nil {
 		return nil, fmt.Errorf("getting gadget features: %w", err)
@@ -333,4 +338,136 @@ func getSimpleType(typ btf.Type) reflect.Type {
 	}
 
 	return nil
+}
+
+// functions to send columns from server to client
+func typeFromBTF(typ btf.Type) *types.Type {
+	switch typedMember := typ.(type) {
+	case *btf.Array:
+		arrType := simpleTypeFromBTF(typedMember.Type)
+		if arrType == nil {
+			return nil
+		}
+		return &types.Type{Name: arrType.Name, Size: int(typedMember.Nelems)}
+	default:
+		return simpleTypeFromBTF(typ)
+	}
+}
+
+func simpleTypeFromBTF(typ btf.Type) *types.Type {
+	switch typedMember := typ.(type) {
+	case *btf.Int:
+		switch typedMember.Encoding {
+		case btf.Signed:
+			switch typedMember.Size {
+			case 1:
+				return &types.Type{Name: "int8"}
+			case 2:
+				return &types.Type{Name: "int16"}
+			case 4:
+				return &types.Type{Name: "int32"}
+			case 8:
+				return &types.Type{Name: "int64"}
+			}
+		case btf.Unsigned:
+			switch typedMember.Size {
+			case 1:
+				return &types.Type{Name: "uint8"}
+			case 2:
+				return &types.Type{Name: "int16"}
+			case 4:
+				return &types.Type{Name: "int32"}
+			case 8:
+				return &types.Type{Name: "int64"}
+			}
+		case btf.Bool:
+			return &types.Type{Name: "bool"}
+		case btf.Char:
+			return &types.Type{Name: "uint8"}
+		}
+	case *btf.Float:
+		switch typedMember.Size {
+		case 4:
+			return &types.Type{Name: "float32"}
+		case 8:
+			return &types.Type{Name: "float64"}
+		}
+	case *btf.Typedef:
+		typ, _ := getUnderlyingType(typedMember)
+		return simpleTypeFromBTF(typ)
+	}
+
+	return nil
+}
+
+func calculateColumnsForClient(gadgetMetadata *types.GadgetMetadata, progContent []byte) ([]types.ColumnDesc, error) {
+	eventType, err := getEventTypeBTF(progContent, gadgetMetadata)
+	if err != nil {
+		return nil, fmt.Errorf("getting value struct: %w", err)
+	}
+
+	colNames := map[string]struct{}{}
+
+	eventStruct, ok := gadgetMetadata.Structs[eventType.Name]
+	if !ok {
+		return nil, fmt.Errorf("struct %s not found in gadget metadata", eventType.Name)
+	}
+
+	for _, field := range eventStruct.Fields {
+		colNames[field.Name] = struct{}{}
+	}
+
+	columns := []types.ColumnDesc{}
+
+	for _, member := range eventType.Members {
+		member := member
+
+		_, ok := colNames[member.Name]
+		if !ok {
+			continue
+		}
+
+		switch member.Type.TypeName() {
+		case types.L3EndpointTypeName:
+			col := types.ColumnDesc{
+				Name:  member.Name,
+				Index: -1,
+				Type:  types.Type{Name: "l3endpoint"},
+			}
+			columns = append(columns, col)
+			continue
+		case types.L4EndpointTypeName:
+			// Add the column that is enriched
+			col := types.ColumnDesc{
+				Name:  member.Name,
+				Index: -1,
+				Type:  types.Type{Name: "l4endpoint"},
+			}
+			columns = append(columns, col)
+			continue
+		case types.TimestampTypeName:
+			col := types.ColumnDesc{
+				Name:  member.Name,
+				Index: -1,
+				Type:  types.Type{Name: "timestamp"},
+			}
+			columns = append(columns, col)
+			continue
+		}
+
+		rType := typeFromBTF(member.Type)
+		if rType == nil {
+			continue
+		}
+
+		col := types.ColumnDesc{
+			Name:   member.Name,
+			Type:   *rType,
+			Offset: uintptr(member.Offset.Bytes()),
+		}
+
+		columns = append(columns, col)
+	}
+
+	return columns, nil
 }
