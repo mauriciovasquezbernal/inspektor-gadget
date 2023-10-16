@@ -169,7 +169,7 @@ func (s *Service) RunGadget(runGadget api.GadgetManager_RunGadgetServer) error {
 	}
 
 	// Create payload buffer
-	outputBuffer := make(chan *api.GadgetEvent, 1024) // TODO: Discuss 1024
+	outputBuffer := make(chan *api.GadgetEvent, 16384) // TODO: X * $nproc * num_node
 
 	seq := uint32(0)
 	var seqLock sync.Mutex
