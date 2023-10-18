@@ -59,7 +59,7 @@ Then, create a perf event array eBPF map to send events to user space:
 struct {
 	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
 	__uint(key_size, sizeof(u32));
-	__type(value, struct event);
+	__uint(value_size, sizeof(u32));
 } events SEC(".maps");
 ```
 
@@ -124,7 +124,7 @@ const struct event *unusedevent __attribute__((unused));
 struct {
 	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
 	__uint(key_size, sizeof(u32));
-	__type(value, struct event);
+	__uint(value_size, sizeof(u32));
 } events SEC(".maps");
 
 GADGET_TRACER(open, events, event);
