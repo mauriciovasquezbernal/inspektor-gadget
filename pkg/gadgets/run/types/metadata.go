@@ -175,14 +175,6 @@ func validateTraceMap(traceMap *ebpf.MapSpec) error {
 			traceMap.Name, traceMap.Type.String())
 	}
 
-	if traceMap.Value == nil {
-		return fmt.Errorf("map %q does not have BTF information its value", traceMap.Name)
-	}
-
-	if _, ok := traceMap.Value.(*btf.Struct); !ok {
-		return fmt.Errorf("value of BPF map %q is not a structure", traceMap.Name)
-	}
-
 	return nil
 }
 
@@ -309,7 +301,10 @@ func (m *GadgetMetadata) populateTracers(spec *ebpf.CollectionSpec) error {
 		return fmt.Errorf("trace map is invalid: %w", err)
 	}
 
-	traceMapStruct := traceMap.Value.(*btf.Struct)
+	var traceMapStruct *btf.Struct
+	if err := spec.Types.TypeByName(traceInfo.eventType, &traceMapStruct); err != nil {
+		return fmt.Errorf("finding struct %q in eBPF object: %w", traceInfo.eventType, err)
+	}
 
 	if _, found := m.Tracers[traceInfo.name]; !found {
 		log.Debugf("Adding tracer %q", traceMap.Name)

@@ -44,13 +44,9 @@ func getEventTypeBTF(progContent []byte, metadata *types.GadgetMetadata) (*btf.S
 			return nil, fmt.Errorf("BPF map %q not found", tracer.MapName)
 		}
 
-		if traceMap.Value == nil {
-			return nil, fmt.Errorf("BPF map %q does not have BTF information for its values", traceMap.Name)
-		}
-
-		valueStruct, ok := traceMap.Value.(*btf.Struct)
-		if !ok {
-			return nil, fmt.Errorf("value of BPF map %q is not a structure", traceMap.Name)
+		var valueStruct *btf.Struct
+		if err := spec.Types.TypeByName(tracer.StructName, &valueStruct); err != nil {
+			return nil, fmt.Errorf("finding struct %q in eBPF object: %w", tracer.StructName, err)
 		}
 
 		return valueStruct, nil
