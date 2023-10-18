@@ -148,37 +148,21 @@ func loadSpec(progContent []byte) (*ebpf.CollectionSpec, error) {
 	return spec, err
 }
 
-// getTracerMap returns the tracer map as defined in gadgetMetadata. If not found returns nil.
-func getTracerMap(spec *ebpf.CollectionSpec, gadgetMetadata *types.GadgetMetadata) *ebpf.MapSpec {
-	// We only support a single tracer map now, so this code returns the single element on the
-	// map or nil.
-	var traceMap *ebpf.MapSpec
-	for _, tracer := range gadgetMetadata.Tracers {
-		traceMap = spec.Maps[tracer.MapName]
-	}
-
-	return traceMap
-}
-
 func getEventTypeBTF(info *types.GadgetInfo) (*btf.Struct, error) {
 	spec, err := loadSpec(info.ProgContent)
 	if err != nil {
 		return nil, err
 	}
 
-	// Look for tracer maps
-	traceMap := getTracerMap(spec, info.GadgetMetadata)
-	if traceMap != nil {
-		if traceMap.Value == nil {
-			return nil, fmt.Errorf("BPF map %q does not have BTF information for its values", traceMap.Name)
+	if len(info.GadgetMetadata.Tracers) > 0 {
+		var btfStruct *btf.Struct
+		_, tracer := getAnyMapElem(info.GadgetMetadata.Tracers)
+
+		if err := spec.Types.TypeByName(tracer.StructName, &btfStruct); err != nil {
+			return nil, err
 		}
 
-		valueStruct, ok := traceMap.Value.(*btf.Struct)
-		if !ok {
-			return nil, fmt.Errorf("value of BPF map %q is not a structure", traceMap.Name)
-		}
-
-		return valueStruct, nil
+		return btfStruct, nil
 	}
 
 	return nil, fmt.Errorf("the gadget doesn't provide any compatible way to show information")

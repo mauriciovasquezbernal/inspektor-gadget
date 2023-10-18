@@ -129,31 +129,20 @@ func (t *Tracer) Stop() {
 	}
 }
 
-func (t *Tracer) handleTraceMap() (*ebpf.MapSpec, error) {
-	// If the gadget doesn't provide a map it's not an error becuase it could provide other ways
+func (t *Tracer) handleTraceMap() (string, error) {
+	// If the gadget doesn't provide a map it's not an error because it could provide other ways
 	// to output data
-	traceMap := getTracerMap(t.spec, t.config.Metadata)
-	if traceMap == nil {
-		return nil, nil
+	if len(t.config.Metadata.Tracers) == 0 {
+		return "", nil
 	}
 
-	eventType, ok := traceMap.Value.(*btf.Struct)
-	if !ok {
-		return nil, fmt.Errorf("BPF map %q does not have BTF info for values", traceMap.Name)
-	}
-	t.eventType = eventType
+	_, tracer := getAnyMapElem(t.config.Metadata.Tracers)
 
-	// Almost same hack as in https://github.com/solo-io/bumblebee/blob/c2422b5bab66754b286d062317e244f02a431dac/pkg/loader/loader.go#L114-L120
-	// TODO: Remove it?
-	switch traceMap.Type {
-	case ebpf.RingBuf:
-		traceMap.ValueSize = 0
-	case ebpf.PerfEventArray:
-		traceMap.KeySize = 4
-		traceMap.ValueSize = 4
+	if err := t.spec.Types.TypeByName(tracer.StructName, &t.eventType); err != nil {
+		return "", err
 	}
 
-	return traceMap, nil
+	return tracer.MapName, nil
 }
 
 func (t *Tracer) installTracer() error {
@@ -208,13 +197,13 @@ func (t *Tracer) installTracer() error {
 	}
 
 	// Some logic before loading the programs
-	if traceMap != nil {
-		m := t.collection.Maps[traceMap.Name]
+	if traceMap != "" {
+		m := t.collection.Maps[traceMap]
 		switch m.Type() {
 		case ebpf.RingBuf:
-			t.ringbufReader, err = ringbuf.NewReader(t.collection.Maps[traceMap.Name])
+			t.ringbufReader, err = ringbuf.NewReader(t.collection.Maps[traceMap])
 		case ebpf.PerfEventArray:
-			t.perfReader, err = perf.NewReader(t.collection.Maps[traceMap.Name], gadgets.PerfBufferPages*os.Getpagesize())
+			t.perfReader, err = perf.NewReader(t.collection.Maps[traceMap], gadgets.PerfBufferPages*os.Getpagesize())
 		}
 		if err != nil {
 			return fmt.Errorf("create BPF map reader: %w", err)

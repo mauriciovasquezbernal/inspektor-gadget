@@ -169,13 +169,13 @@ func validateTraceMap(traceMap *ebpf.MapSpec) error {
 			traceMap.Name, traceMap.Type.String())
 	}
 
-	if traceMap.Value == nil {
-		return fmt.Errorf("map %q does not have BTF information its value", traceMap.Name)
-	}
-
-	if _, ok := traceMap.Value.(*btf.Struct); !ok {
-		return fmt.Errorf("value of BPF map %q is not a structure", traceMap.Name)
-	}
+	//	if traceMap.Value == nil {
+	//		return fmt.Errorf("map %q does not have BTF information its value", traceMap.Name)
+	//	}
+	//
+	//	if _, ok := traceMap.Value.(*btf.Struct); !ok {
+	//		return fmt.Errorf("value of BPF map %q is not a structure", traceMap.Name)
+	//	}
 
 	return nil
 }
@@ -285,37 +285,44 @@ func getColumnSize(typ btf.Type) uint {
 }
 
 func (m *GadgetMetadata) populateTracers(spec *ebpf.CollectionSpec) error {
-	traceMap := getTracerMapFromeBPF(spec)
-	if traceMap == nil {
+	//it := spec.Types.Iterate()
+	//for it.Next() {
+	//	fmt.Printf("%+v\n", it.Type)
+	//}
+
+	tracerName, mapName, structName, err := getTracerInfo(spec)
+	if err != nil {
+		return err
+	}
+	if tracerName == "" {
 		log.Debug("No trace map found")
 		return nil
 	}
 
-	if err := validateTraceMap(traceMap); err != nil {
+	tracerMap := spec.Maps[mapName]
+	if tracerMap == nil {
+		return fmt.Errorf("tracer map %q not found", mapName)
+	}
+
+	if err := validateTraceMap(tracerMap); err != nil {
 		return fmt.Errorf("trace map is invalid: %w", err)
 	}
 
-	traceMapStruct := traceMap.Value.(*btf.Struct)
-
-	found := false
-
-	// TODO: this is weird but we need to check the map name as the tracer name can be
-	// different.
-	for _, t := range m.Tracers {
-		if t.MapName == traceMap.Name {
-			found = true
-			break
-		}
+	var traceMapStruct *btf.Struct
+	if err := spec.Types.TypeByName(structName, &traceMapStruct); err != nil {
+		return err
 	}
 
+	_, found := m.Tracers[tracerName]
+
 	if !found {
-		log.Debugf("Adding tracer %q", traceMap.Name)
-		m.Tracers[traceMap.Name] = Tracer{
-			MapName:    traceMap.Name,
+		log.Debugf("Adding tracer %q", tracerName)
+		m.Tracers[tracerName] = Tracer{
+			MapName:    mapName,
 			StructName: traceMapStruct.Name,
 		}
 	} else {
-		log.Debugf("Tracer using map %q already defined, skipping", traceMap.Name)
+		log.Debugf("Tracer %q already defined, skipping", tracerName)
 	}
 
 	if err := m.populateStruct(traceMapStruct); err != nil {
@@ -342,11 +349,19 @@ func getGadgetIdentByPrefix(spec *ebpf.CollectionSpec, prefix string) string {
 	return ""
 }
 
-// getTracerMapFromeBPF returns the tracer map from the eBPF object.
-// It looks for maps marked with GADGET_TRACE_MAP() and returns the first one.
-func getTracerMapFromeBPF(spec *ebpf.CollectionSpec) *ebpf.MapSpec {
-	mapName := getGadgetIdentByPrefix(spec, gadgets.TraceMapPrefix)
-	return spec.Maps[mapName]
+// getTracerInfo returns the tracer name, map name and struct name
+func getTracerInfo(spec *ebpf.CollectionSpec) (string, string, string, error) {
+	name := getGadgetIdentByPrefix(spec, gadgets.TraceMapPrefix)
+	if name == "" {
+		return "", "", "", nil
+	}
+
+	parts := strings.Split(name, "___")
+	if len(parts) != 3 {
+		return "", "", "", fmt.Errorf("invalid trace map info: %q", name)
+	}
+
+	return parts[0], parts[1], parts[2], nil
 }
 
 func (m *GadgetMetadata) populateStruct(btfStruct *btf.Struct) error {
