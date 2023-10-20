@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -35,6 +36,7 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/run/types"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/oci"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/parser"
 	eventtypes "github.com/inspektor-gadget/inspektor-gadget/pkg/types"
@@ -147,7 +149,55 @@ func getGadgetInfo(params *params.Params, args []string, logger logger.Logger) (
 		return nil, err
 	}
 
+	if err := fillGadgetFeatures(spec, ret); err != nil {
+		return nil, fmt.Errorf("filling gadget features: %w", err)
+	}
+
+	// needs to be done after fillGadgetFeatures
+	ret.OperatorsParamsCollection = operators.GetOperatorsForRunGadget(ret).ParamDescCollection()
+
 	return ret, nil
+}
+
+func fillGadgetFeatures(spec *ebpf.CollectionSpec, info *types.GadgetInfo) error {
+	gadgetMetadata := info.GadgetMetadata
+	eventType, err := getEventTypeBTF(info.ProgContent, gadgetMetadata)
+	if err != nil {
+		return fmt.Errorf("getting value struct: %w", err)
+	}
+
+	for _, member := range eventType.Members {
+		switch member.Type.TypeName() {
+		case gadgets.MntNsIdTypeName:
+			info.Features.HasMountNs = true
+		case gadgets.L3EndpointTypeName, gadgets.L4EndpointTypeName:
+			info.Features.HasEndpoints = true
+		}
+	}
+
+	for _, p := range spec.Programs {
+		if p.Type == ebpf.SocketFilter && strings.HasPrefix(p.SectionName, "socket") {
+			info.Features.IsAttacher = true
+			// TODO: info.Features.HasNetNs = true
+			// However it creates an issue because he netns column is added twice!
+		}
+
+		if p.Type == ebpf.Tracing && strings.HasPrefix(p.SectionName, "iter/") {
+			switch p.AttachTo {
+			case "tcp", "udp":
+				info.Features.IsAttacher = true
+				info.Features.HasNetNs = true
+			}
+		}
+	}
+
+	for _, p := range spec.Maps {
+		if p.Name == gadgets.MntNsFilterMapName {
+			info.Features.CanFilterByMountNs = true
+		}
+	}
+
+	return nil
 }
 
 func getTypeHint(typ btf.Type) params.TypeHint {
@@ -425,6 +475,27 @@ func (g *GadgetDesc) getColumns(info *types.GadgetInfo) (*columns.Columns[types.
 	}
 
 	cols := types.GetColumns()
+
+	// Remove columns according to the features that the gadget supports.
+	// TODO: what about attacher interface?
+	for name, col := range cols.ColumnMap {
+		if !info.Features.HasMountNs && name == "mntns" {
+			delete(cols.ColumnMap, name)
+		}
+
+		if !info.Features.HasNetNs && name == "netns" {
+			delete(cols.ColumnMap, name)
+		}
+
+		if !info.Features.HasMountNs && !info.Features.HasNetNs {
+			for _, tag := range col.Tags {
+				switch tag {
+				case "kubernetes", "runtime":
+					delete(cols.ColumnMap, name)
+				}
+			}
+		}
+	}
 
 	members := map[string]btf.Member{}
 	for _, member := range eventType.Members {

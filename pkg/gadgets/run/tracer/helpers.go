@@ -30,6 +30,7 @@ func getAnyMapElem[K comparable, V any](m map[K]V) (*K, *V) {
 	return nil, nil
 }
 
+// TODO: This should receive the spec
 func getEventTypeBTF(progContent []byte, metadata *types.GadgetMetadata) (*btf.Struct, error) {
 	spec, err := loadSpec(progContent)
 	if err != nil {
