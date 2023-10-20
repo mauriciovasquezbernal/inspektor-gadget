@@ -85,6 +85,7 @@ type GadgetInfo struct {
 	GadgetMetadata            *GadgetMetadata
 	ProgContent               []byte
 	GadgetType                gadgets.GadgetType
+	OperatorsParamsCollection params.DescCollection
 	Features                  GadgetFeatures
 }
 
