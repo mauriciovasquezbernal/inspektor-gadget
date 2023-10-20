@@ -363,7 +363,7 @@ func (r *Runtime) runGadgetOnTargets(
 	paramMap map[string]string,
 	targets []target,
 ) (runtime.CombinedGadgetResult, error) {
-	if gadgetCtx.GadgetType() == gadgets.TypeTraceIntervals {
+	if gadgetCtx.GadgetInfo().GadgetType == gadgets.TypeTraceIntervals {
 		gadgetCtx.Parser().EnableSnapshots(
 			gadgetCtx.Context(),
 			time.Duration(gadgetCtx.GadgetParams().Get(gadgets.ParamInterval).AsInt32())*time.Second,
@@ -372,7 +372,7 @@ func (r *Runtime) runGadgetOnTargets(
 		defer gadgetCtx.Parser().Flush()
 	}
 
-	if gadgetCtx.GadgetType() == gadgets.TypeOneShot {
+	if gadgetCtx.GadgetInfo().GadgetType == gadgets.TypeOneShot {
 		gadgetCtx.Parser().EnableCombiner()
 		defer gadgetCtx.Parser().Flush()
 	}

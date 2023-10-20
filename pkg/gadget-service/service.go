@@ -159,12 +159,13 @@ func (s *Service) RunGadget(runGadget api.GadgetManager_RunGadgetServer) error {
 		return fmt.Errorf("setting parameters: %w", err)
 	}
 
+	var gadgetInfo *runTypes.GadgetInfo
+
 	if c, ok := gadgetDesc.(runTypes.RunGadgetDesc); ok {
-		gadgetInfo, err := s.runtime.GetGadgetInfo(runGadget.Context(), gadgetDesc, gadgetParams, request.Args)
+		gadgetInfo, err = s.runtime.GetGadgetInfo(runGadget.Context(), gadgetDesc, gadgetParams, request.Args)
 		if err != nil {
 			return fmt.Errorf("getting gadget info: %w", err)
 		}
-		gType = gadgetInfo.GadgetType
 		parser, err = c.CustomParser(gadgetInfo)
 		if err != nil {
 			return fmt.Errorf("calling custom parser: %w", err)
@@ -259,7 +260,7 @@ func (s *Service) RunGadget(runGadget api.GadgetManager_RunGadgetServer) error {
 		parser,
 		logger,
 		time.Duration(request.Timeout),
-		gType,
+		gadgetInfo,
 	)
 	defer gadgetCtx.Cancel()
 

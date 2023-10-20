@@ -450,7 +450,7 @@ func buildCommandFromGadget(
 				parser,
 				logger.DefaultLogger(),
 				timeoutDuration,
-				gType,
+				runGadgetInfo,
 			)
 			defer gadgetCtx.Cancel()
 

@@ -274,7 +274,7 @@ func BenchmarkAllGadgetsWithContainers(b *testing.B) {
 							parser,
 							logger.DefaultLogger(),
 							0,
-							gadgetDesc.Type(),
+							nil,
 						)
 
 						_, err := runtime.RunGadget(gadgetCtx)
