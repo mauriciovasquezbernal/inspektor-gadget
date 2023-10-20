@@ -28,6 +28,7 @@ import (
 	"github.com/containerd/containerd/oci"
 	"github.com/containerd/containerd/pkg/cri/constants"
 	"github.com/containerd/containerd/snapshots"
+	"github.com/docker/go-connections/nat"
 	"github.com/opencontainers/runtime-spec/specs-go"
 )
 
@@ -67,6 +68,10 @@ func (c *ContainerdContainer) ID() string {
 
 func (c *ContainerdContainer) Pid() int {
 	return c.pid
+}
+
+func (c *ContainerdContainer) PortBindings() nat.PortMap {
+	return c.portBindings
 }
 
 func (c *ContainerdContainer) initClientAndCtx() error {
@@ -118,6 +123,9 @@ func (c *ContainerdContainer) Run(t *testing.T) {
 	}
 	if c.options.seccompProfile != "" {
 		t.Fatalf("testutils/containerd: seccomp profiles are not supported yet")
+	}
+	if c.options.portBindings != nil {
+		t.Fatalf("testutils/containerd: Port bindings are not supported yet")
 	}
 
 	var spec specs.Spec

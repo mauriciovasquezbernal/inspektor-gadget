@@ -24,6 +24,7 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
 	"github.com/docker/docker/client"
+	"github.com/docker/go-connections/nat"
 )
 
 func NewDockerContainer(name, cmd string, options ...Option) Container {
@@ -58,6 +59,10 @@ func (d *DockerContainer) Pid() int {
 	return d.pid
 }
 
+func (d *DockerContainer) PortBindings() nat.PortMap {
+	return d.portBindings
+}
+
 func (d *DockerContainer) initClient() error {
 	var err error
 	d.client, err = client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
@@ -83,6 +88,10 @@ func (d *DockerContainer) Run(t *testing.T) {
 	hostConfig := &container.HostConfig{}
 	if d.options.seccompProfile != "" {
 		hostConfig.SecurityOpt = []string{fmt.Sprintf("seccomp=%s", d.options.seccompProfile)}
+	}
+
+	if d.options.portBindings != nil {
+		hostConfig.PortBindings = d.options.portBindings
 	}
 
 	resp, err := d.client.ContainerCreate(d.options.ctx, &container.Config{
@@ -113,6 +122,7 @@ func (d *DockerContainer) Run(t *testing.T) {
 		t.Fatalf("Failed to inspect container: %s", err)
 	}
 	d.pid = containerJSON.State.Pid
+	d.portBindings = containerJSON.HostConfig.PortBindings
 
 	if d.options.logs {
 		out, err := d.client.ContainerLogs(d.options.ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true, ShowStderr: true})

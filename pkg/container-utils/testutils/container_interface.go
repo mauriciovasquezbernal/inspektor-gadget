@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/docker/go-connections/nat"
+
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 )
 
@@ -27,9 +29,10 @@ type containerSpec struct {
 	options *containerOptions
 
 	// Internal state
-	id      string
-	pid     int
-	started bool
+	id           string
+	pid          int
+	started      bool
+	portBindings nat.PortMap
 }
 
 type Container interface {
@@ -39,6 +42,7 @@ type Container interface {
 	ID() string
 	Pid() int
 	Running() bool
+	PortBindings() nat.PortMap
 }
 
 var SupportedContainerRuntimes = []types.RuntimeName{
