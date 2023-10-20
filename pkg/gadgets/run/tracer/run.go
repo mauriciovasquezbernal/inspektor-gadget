@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"strings"
 	"unsafe"
 
 	"github.com/cilium/ebpf"
@@ -147,7 +148,52 @@ func getGadgetInfo(params *params.Params, args []string, logger logger.Logger) (
 		return nil, err
 	}
 
+	if err := fillGadgetFeatures(spec, ret); err != nil {
+		return nil, fmt.Errorf("filling gadget features: %w", err)
+	}
+
 	return ret, nil
+}
+
+func fillGadgetFeatures(spec *ebpf.CollectionSpec, info *types.GadgetInfo) error {
+	gadgetMetadata := info.GadgetMetadata
+	eventType, err := getEventTypeBTF(info.ProgContent, gadgetMetadata)
+	if err != nil {
+		return fmt.Errorf("getting value struct: %w", err)
+	}
+
+	for _, member := range eventType.Members {
+		switch member.Type.TypeName() {
+		case gadgets.MntNsIdTypeName:
+			info.Features.HasMountNs = true
+		case gadgets.L3EndpointTypeName, gadgets.L4EndpointTypeName:
+			info.Features.HasEndpoints = true
+		}
+	}
+
+	for _, p := range spec.Programs {
+		if p.Type == ebpf.SocketFilter && strings.HasPrefix(p.SectionName, "socket") {
+			info.Features.IsAttacher = true
+			// TODO: info.Features.HasNetNs = true
+			// However it creates an issue because he netns column is added twice!
+		}
+
+		if p.Type == ebpf.Tracing && strings.HasPrefix(p.SectionName, "iter/") {
+			switch p.AttachTo {
+			case "tcp", "udp":
+				info.Features.IsAttacher = true
+				info.Features.HasNetNs = true
+			}
+		}
+	}
+
+	for _, p := range spec.Maps {
+		if p.Name == gadgets.MntNsFilterMapName {
+			info.Features.CanFilterByMountNs = true
+		}
+	}
+
+	return nil
 }
 
 func getTypeHint(typ btf.Type) params.TypeHint {
