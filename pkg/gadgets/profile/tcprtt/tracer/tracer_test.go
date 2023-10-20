@@ -34,7 +34,6 @@ import (
 
 	utilstest "github.com/inspektor-gadget/inspektor-gadget/internal/test"
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/profile/tcprtt/types"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/histogram"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
@@ -990,6 +989,6 @@ func newGadgetCtx(gadgetParams *params.Params, timeout time.Duration) *gadgetcon
 		nil,
 		log.StandardLogger(),
 		timeout,
-		gadgets.TypeProfile,
+		nil,
 	)
 }

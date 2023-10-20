@@ -170,7 +170,7 @@ func handleMetric(
 		parser,
 		logger.DefaultLogger(),
 		0,
-		gadgetDesc.Type(),
+		nil,
 	)
 
 	// Handle remaining filtering logic in the parser
