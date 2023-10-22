@@ -42,7 +42,7 @@ type AuthOptions struct {
 }
 
 var (
-	defaultOciStore = "/var/lib/ig/oci-store"
+	DefaultOciStore = "/var/lib/ig/oci-store"
 	DefaultAuthFile = "/var/lib/ig/config.json"
 )
 
@@ -67,10 +67,10 @@ func (d *GadgetImageDesc) String() string {
 }
 
 func getLocalOciStore() (*oci.Store, error) {
-	if err := os.MkdirAll(filepath.Dir(defaultOciStore), 0o700); err != nil {
+	if err := os.MkdirAll(filepath.Dir(DefaultOciStore), 0o700); err != nil {
 		return nil, err
 	}
-	return oci.New(defaultOciStore)
+	return oci.New(DefaultOciStore)
 }
 
 // GetGadgetImage pulls the gadget image and returns the a structure representing it.

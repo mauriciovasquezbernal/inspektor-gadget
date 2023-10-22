@@ -122,7 +122,7 @@ func (d *DockerContainer) Run(t *testing.T) {
 		t.Fatalf("Failed to inspect container: %s", err)
 	}
 	d.pid = containerJSON.State.Pid
-	d.portBindings = containerJSON.HostConfig.PortBindings
+	d.portBindings = containerJSON.NetworkSettings.Ports
 
 	if d.options.logs {
 		out, err := d.client.ContainerLogs(d.options.ctx, resp.ID, types.ContainerLogsOptions{ShowStdout: true, ShowStderr: true})
