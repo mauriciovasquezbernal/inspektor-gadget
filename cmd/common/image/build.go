@@ -151,6 +151,19 @@ func runBuild(opts *cmdOpts) error {
 		return fmt.Errorf("source file %q not found", conf.EBPFSource)
 	}
 
+	wasmObjectPath := ""
+	switch {
+	case conf.Wasm == "": // User didn't provide a wasm file
+	case strings.HasSuffix(conf.Wasm, ".wasm"):
+		// User provided an already-built wasm file
+		wasmObjectPath = conf.Wasm
+	case strings.HasSuffix(conf.Wasm, ".go"):
+		// User provided a source file to build wasm from
+		wasmObjectPath = filepath.Join(tmpDir, "program.wasm")
+	default:
+		return fmt.Errorf("invalid wasm file %q", conf.Wasm)
+	}
+
 	if opts.local {
 		if err := buildLocal(opts, conf, tmpDir); err != nil {
 			return err
@@ -170,14 +183,7 @@ func runBuild(opts *cmdOpts) error {
 		MetadataPath:     conf.Metadata,
 		UpdateMetadata:   opts.updateMetadata,
 		ValidateMetadata: opts.validateMetadata,
-	}
-
-	if strings.HasSuffix(conf.Wasm, ".wasm") {
-		// User provided an already-built wasm file
-		buildOpts.WasmObjectPath = conf.Wasm
-	} else if conf.Wasm != "" {
-		// User provided a source file to build wasm from
-		buildOpts.WasmObjectPath = filepath.Join(tmpDir, "program.wasm")
+		WasmObjectPath:   wasmObjectPath,
 	}
 
 	desc, err := oci.BuildGadgetImage(context.TODO(), buildOpts, opts.image)
@@ -200,10 +206,15 @@ func buildLocal(opts *cmdOpts, conf *buildFile, output string) error {
 		"make", "-f", makefilePath,
 		"-j", fmt.Sprintf("%d", runtime.NumCPU()),
 		"EBPFSOURCE="+conf.EBPFSource,
-		"WASM="+conf.Wasm,
 		"OUTPUTDIR="+output,
 		"CFLAGS="+conf.CFlags,
+		"all",
 	)
+	if conf.Wasm != "" && !strings.HasSuffix(conf.Wasm, ".wasm") {
+		buildCmd.Args = append(buildCmd.Args, "WASM="+conf.Wasm)
+		buildCmd.Args = append(buildCmd.Args, "wasm")
+	}
+
 	if out, err := buildCmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("build script: %w: %s", err, out)
 	}
@@ -257,22 +268,25 @@ func buildInContainer(opts *cmdOpts, conf *buildFile, output string) error {
 		reader.Close()
 	}
 
-	wasmFullPath := ""
-	if conf.Wasm != "" {
-		wasmFullPath = filepath.Join("/work", conf.Wasm)
+	cmdArgs := []string{
+		"make", "-f", "/Makefile", "-j", fmt.Sprintf("%d", runtime.NumCPU()),
+		"EBPFSOURCE=" + filepath.Join("/work", conf.EBPFSource),
+		"OUTPUTDIR=/out",
+		"CFLAGS=" + conf.CFlags,
+		"all",
 	}
+
+	if conf.Wasm != "" && !strings.HasSuffix(conf.Wasm, ".wasm") {
+		cmdArgs = append(cmdArgs, "WASM="+filepath.Join("/work", conf.Wasm))
+		cmdArgs = append(cmdArgs, "wasm")
+	}
+
 	resp, err := cli.ContainerCreate(
 		ctx,
 		&container.Config{
 			Image: opts.builderImage,
-			Cmd: []string{
-				"make", "-f", "/Makefile", "-j", fmt.Sprintf("%d", runtime.NumCPU()),
-				"EBPFSOURCE=" + filepath.Join("/work", conf.EBPFSource),
-				"WASM=" + wasmFullPath,
-				"OUTPUTDIR=/out",
-				"CFLAGS=" + conf.CFlags,
-			},
-			User: fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
+			Cmd:   cmdArgs,
+			User:  fmt.Sprintf("%d:%d", os.Getuid(), os.Getgid()),
 		},
 		&container.HostConfig{
 			Mounts: []mount.Mount{

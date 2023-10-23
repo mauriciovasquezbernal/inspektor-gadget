@@ -13,7 +13,7 @@ TARGETS = \
 	#
 
 .PHONY: all
-all: $(TARGETS) wasm
+all: $(TARGETS)
 
 $(OUTPUTDIR)/%.bpf.o: $(EBPFSOURCE)
 	$(CLANG) $(BASECFLAGS) $(CFLAGS) -D __TARGET_ARCH_$(subst amd64,x86,$*) \
@@ -21,16 +21,7 @@ $(OUTPUTDIR)/%.bpf.o: $(EBPFSOURCE)
 	$(LLVM-STRIP) -g $@
 
 .PHONY: wasm
-ifeq ($(WASM),)
-wasm:
-	# No wasm file found. Nothing to do.
-else ifeq (go,$(patsubst %.go,go,$(WASM)))
-wasm: $(WASM)
-	tinygo build -o $(OUTPUTDIR)/program.wasm -target=wasi --no-debug $^
-else ifeq (wasm,$(patsubst %.wasm,wasm,$(WASM)))
-wasm:
-	# Wasm file already compiled. Nothing to do.
-else
-wasm:
-	$(error Unsupported wasm file type: $(notdir $(WASM)))
-endif
+wasm: $(OUTPUTDIR)/program.wasm
+
+$(OUTPUTDIR)/program.wasm: $(WASM)
+	tinygo build -o $@ -target=wasi --no-debug $<
