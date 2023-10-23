@@ -18,16 +18,13 @@ struct event {
 	__u8 filename[NAME_MAX];
 };
 
-// we need this to make sure the compiler doesn't remove our struct
-const struct event *unusedevent __attribute__((unused));
-
 struct {
 	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
 	__uint(key_size, sizeof(u32));
 	__type(value, struct event);
 } events SEC(".maps");
 
-GADGET_TRACE_MAP(events);
+GADGET_TRACER(test, events, event);
 
 // map used to test that a wrong map type can't be used
 struct {
@@ -36,13 +33,6 @@ struct {
 	__type(key, mnt_ns_id_t);
 	__type(value, __u8);
 } myhashmap SEC(".maps");
-
-// map used to test wrong value type
-struct {
-	__uint(type, BPF_MAP_TYPE_PERF_EVENT_ARRAY);
-	__uint(key_size, sizeof(u32));
-	__type(value, sizeof(u32));
-} wrong_value_map SEC(".maps");
 
 // map used to test map without BTF
 // TODO: It's probably that this support will be removed from ebpf library as it was done in libbpf
@@ -57,7 +47,7 @@ struct {
 	.type = BPF_MAP_TYPE_PERF_EVENT_ARRAY,
 	.max_entries = 4,
 	.key_size = sizeof(int),
-	.value_size = sizeof(struct event),
+	.value_size = sizeof(int),
 };
 
 SEC("tracepoint/syscalls/sys_enter_openat")
