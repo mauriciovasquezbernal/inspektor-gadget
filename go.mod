@@ -3,7 +3,7 @@ module github.com/inspektor-gadget/inspektor-gadget
 go 1.20
 
 require (
-	github.com/cilium/ebpf v0.12.1
+	github.com/cilium/ebpf v0.12.2
 	github.com/containerd/nri v0.5.0
 	github.com/containers/common v0.56.0
 	github.com/docker/docker v24.0.6+incompatible
@@ -11,7 +11,7 @@ require (
 	github.com/giantswarm/crd-docs-generator v0.11.0
 	github.com/google/uuid v1.3.1
 	github.com/onsi/ginkgo v1.16.5
-	github.com/onsi/gomega v1.28.0
+	github.com/onsi/gomega v1.28.1
 	github.com/opencontainers/runtime-spec v1.1.0
 	github.com/s3rj1k/go-fanotify/fanotify v0.0.0-20210917134616-9c00a300bb7a
 	github.com/seccomp/libseccomp-golang v0.10.0 // indirect
