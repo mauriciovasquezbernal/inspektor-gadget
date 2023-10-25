@@ -32,11 +32,12 @@ import (
 	gadgetcontext "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-context"
 	gadgetregistry "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-registry"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/run/types"
 	runTypes "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/run/types"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/logger"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/parser"
+	parserpkg "github.com/inspektor-gadget/inspektor-gadget/pkg/parser"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/runtime"
 )
 
@@ -107,7 +108,7 @@ func AddCommandsFromRegistry(rootCmd *cobra.Command, runtime runtime.Runtime, hi
 	}
 }
 
-func buildColumnsOutputFormat(gadgetParams *params.Params, parser parser.Parser, hiddenColumnTags []string) gadgets.OutputFormats {
+func buildColumnsOutputFormat(gadgetParams *params.Params, parser parserpkg.Parser, hiddenColumnTags []string) gadgets.OutputFormats {
 	paramTags := make(map[string]string)
 	if gadgetParams != nil {
 		for _, param := range *gadgetParams {
@@ -273,9 +274,15 @@ func buildCommandFromGadget(
 					return fmt.Errorf("getting gadget info: %w", err)
 				}
 
-				parser, err = runGadgetDesc.CustomParser(gadgetInfo)
-				if err != nil {
-					return fmt.Errorf("calling custom parser: %w", err)
+				if gadgetInfo.Metrics == nil {
+					parser, err = runGadgetDesc.CustomParser(gadgetInfo)
+					if err != nil {
+						return fmt.Errorf("calling custom parser: %w", err)
+					}
+				} else {
+					parser = parserpkg.NewParser[types.Event](types.GetColumns())
+					cb := func(any) {}
+					parser.SetEventCallback(cb)
 				}
 			}
 
@@ -327,6 +334,14 @@ func buildCommandFromGadget(
 				timeoutDuration,
 			)
 			defer gadgetCtx.Cancel()
+
+			if gadgetInfo.Metrics != nil {
+				fmt.Printf("Ctrl + C to stop\n\n")
+				_, err := runtime.RunGadget(gadgetCtx)
+				if err != nil {
+					return fmt.Errorf("running gadget: %w", err)
+				}
+			}
 
 			outputModeInfo := strings.SplitN(outputMode, "=", 2)
 			outputModeName := outputModeInfo[0]

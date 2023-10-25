@@ -175,9 +175,10 @@ func (t *Tracer) installTracer() error {
 		return fmt.Errorf("handling trace programs: %w", err)
 	}
 
-	if t.eventType == nil {
-		return fmt.Errorf("the gadget doesn't provide event type information")
-	}
+	//if t.eventType == nil {
+	//	//return fmt.Errorf("the gadget doesn't provide event type information")
+	//	return nil
+	//}
 
 	// Handle special maps like mount ns filter, socket enricher, etc.
 	for _, m := range t.spec.Maps {

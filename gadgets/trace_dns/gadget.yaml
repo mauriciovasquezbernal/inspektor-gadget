@@ -1,31 +1,31 @@
 name: dns
 description: trace dns requests and responses
-tracers:
-  dns:
-    mapName: events
-    structName: event_t
+#tracers:
+#  dns:
+#    mapName: events
+#    structName: event_t
 metrics:
   manualStats:
-  stats:
-    generate: true
-    labels:
-      - name: mnt_ns_id
-        cType: mnt_ns_id_t
-      - name: pid
-        cType: __u32
-      - name: tid
-        cType: __u32
-      - name: uid
-        cType: __u32
-      - name: gid
-        cType: __u32
-      - name: task
-        cType: task
-    values:
-      - name: count
-        type: __u32
-      - name: count2
-        type: __u32
+#  stats:
+#    generate: true
+#    labels:
+#      - name: mnt_ns_id
+#        cType: mnt_ns_id_t
+#      - name: pid
+#        cType: __u32
+#      - name: tid
+#        cType: __u32
+#      - name: uid
+#        cType: __u32
+#      - name: gid
+#        cType: __u32
+#      - name: task
+#        cType: task
+#    values:
+#      - name: count
+#        type: __u32
+#      - name: count2
+#        type: __u32
 structs:
   event_t:
     fields:
