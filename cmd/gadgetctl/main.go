@@ -24,6 +24,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/common"
+	commonutils "github.com/inspektor-gadget/inspektor-gadget/cmd/common/utils"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/all-gadgets"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/environment"
 	grpcruntime "github.com/inspektor-gadget/inspektor-gadget/pkg/runtime/grpc"
@@ -73,7 +74,11 @@ func main() {
 		// Other flags will be validated in the `Execute()` call and unknown
 		// ones will be rejected
 		rootCmd.FParseErrWhitelist.UnknownFlags = true
-		err := rootCmd.ParseFlags(os.Args[1:])
+		// temporary workaround for https://github.com/inspektor-gadget/inspektor-gadget/pull/2174#issuecomment-1780923952
+		args := commonutils.RemoveSplitSortArgs(os.Args[1:])
+		// --help should be handled after we registered all commands
+		args = commonutils.RemoveHelpArg(args)
+		err := rootCmd.ParseFlags(args)
 		if err != nil {
 			// Analogous to cobra error message
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)

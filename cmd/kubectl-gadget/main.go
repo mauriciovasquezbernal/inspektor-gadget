@@ -26,6 +26,7 @@ import (
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/environment/k8s"
 
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/common"
+	commonutils "github.com/inspektor-gadget/inspektor-gadget/cmd/common/utils"
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/kubectl-gadget/advise"
 	"github.com/inspektor-gadget/inspektor-gadget/cmd/kubectl-gadget/utils"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
@@ -85,7 +86,11 @@ func main() {
 		// Other flags will be validated in the `Execute()` call and unknown
 		// ones will be rejected
 		rootCmd.FParseErrWhitelist.UnknownFlags = true
-		err := rootCmd.ParseFlags(os.Args[1:])
+		// temporary workaround for https://github.com/inspektor-gadget/inspektor-gadget/pull/2174#issuecomment-1780923952
+		args := commonutils.RemoveSplitSortArgs(os.Args[1:])
+		// --help should be handled after we registered all commands
+		args = commonutils.RemoveHelpArg(args)
+		err := rootCmd.ParseFlags(args)
 		if err != nil {
 			// Analogous to cobra error message
 			fmt.Fprintf(os.Stderr, "Error: %v\n", err)

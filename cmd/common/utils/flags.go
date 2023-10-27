@@ -152,3 +152,29 @@ func AddRegistryAuthVariablesAndFlags(cmd *cobra.Command, authOptions *oci.AuthO
 		"Allow connections to HTTP only registries",
 	)
 }
+
+// RemoveSplitSortArgs removes the --sort flag with its arg, if it isn't in the merged form of --sort=foo
+func RemoveSplitSortArgs(args []string) []string {
+	var newArgs []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--sort" {
+			// Next arg is arg of --sort
+			i++
+			continue
+		}
+		newArgs = append(newArgs, args[i])
+	}
+	return newArgs
+}
+
+// RemoveHelpArg removes the --help flag
+func RemoveHelpArg(args []string) []string {
+	var newArgs []string
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--help" {
+			continue
+		}
+		newArgs = append(newArgs, args[i])
+	}
+	return newArgs
+}
