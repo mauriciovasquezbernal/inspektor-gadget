@@ -260,7 +260,18 @@ func (t *Tracer) installTracer() error {
 			if err != nil {
 				return fmt.Errorf("attaching ebpf program to dispatcher: %w", err)
 			}
+		} else if p.Type == ebpf.RawTracepoint && strings.HasPrefix(p.SectionName, "raw_tracepoint/") {
+			opts := link.RawTracepointOptions{
+				Name:    p.AttachTo,
+				Program: t.collection.Programs[progName],
+			}
+			l, err := link.AttachRawTracepoint(opts)
+			if err != nil {
+				return fmt.Errorf("attach BPF program %q: %w", progName, err)
+			}
+			t.links = append(t.links, l)
 		}
+
 	}
 
 	return nil
