@@ -30,7 +30,7 @@
 
 typedef __u8 task[TASK_COMM_LEN];
 
-#include "../../pkg/metrics/metrics.h"
+#include "metrics.h"
 
 // manual metrics demo
 struct __attribute__((__packed__)) labels_t {
