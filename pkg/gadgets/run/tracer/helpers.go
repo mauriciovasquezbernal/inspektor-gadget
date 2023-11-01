@@ -407,6 +407,7 @@ func calculateColumnsForClient(gadgetMetadata *types.GadgetMetadata, progContent
 	}
 
 	colNames := map[string]struct{}{}
+	colNamesWasm := map[string]struct{}{}
 
 	eventStruct, ok := gadgetMetadata.Structs[eventType.Name]
 	if !ok {
@@ -415,7 +416,13 @@ func calculateColumnsForClient(gadgetMetadata *types.GadgetMetadata, progContent
 
 	for _, field := range eventStruct.Fields {
 		colNames[field.Name] = struct{}{}
+		if field.Attributes.WasmHandler {
+			colNamesWasm[field.Name] = struct{}{}
+		}
 	}
+
+	// Create a blob to add extra columns from wasm
+	blob := types.NewBlobEvent()
 
 	columns := []types.ColumnDesc{}
 
@@ -426,6 +433,7 @@ func calculateColumnsForClient(gadgetMetadata *types.GadgetMetadata, progContent
 		if !ok {
 			continue
 		}
+		_, wasmHandler := colNamesWasm[member.Name]
 
 		switch member.Type.TypeName() {
 		case types.L3EndpointTypeName:
@@ -455,15 +463,23 @@ func calculateColumnsForClient(gadgetMetadata *types.GadgetMetadata, progContent
 			continue
 		}
 
+		if wasmHandler {
+			col, _ := blob.AddString(member.Name)
+			col.WasmHandler = wasmHandler
+			columns = append(columns, col)
+			continue
+		}
+
 		rType := typeFromBTF(member.Type)
 		if rType == nil {
 			continue
 		}
 
 		col := types.ColumnDesc{
-			Name:   member.Name,
-			Type:   *rType,
-			Offset: uintptr(member.Offset.Bytes()),
+			Name:        member.Name,
+			Type:        *rType,
+			Offset:      uintptr(member.Offset.Bytes()),
+			WasmHandler: wasmHandler,
 		}
 
 		columns = append(columns, col)
