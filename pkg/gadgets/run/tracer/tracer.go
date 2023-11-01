@@ -64,6 +64,7 @@ type Config struct {
 	ProgContent []byte
 	WasmContent []byte
 	Metadata    *types.GadgetMetadata
+	Columns     []types.ColumnDesc
 	MountnsMap  *ebpf.Map
 
 	// constants to replace in the ebpf program
@@ -372,8 +373,21 @@ func (t *Tracer) processEventFunc(gadgetCtx gadgets.GadgetContext) func(data []b
 		typ   endpointType
 	}
 
+	type wasmColumnDef struct {
+		name  string
+		start uint32
+		size  uint32
+	}
+
 	endpointDefs := []endpointDef{}
 	timestampsOffsets := []uint32{}
+	wasmColumns := map[string]*wasmColumnDef{}
+
+	for _, c := range t.config.Columns {
+		if c.WasmHandler {
+			wasmColumns[c.Name] = &wasmColumnDef{}
+		}
+	}
 
 	// The same same data structure is always sent, so we can precalculate the offsets for
 	// different fields like mount ns id, endpoints, etc.
@@ -420,6 +434,17 @@ func (t *Tracer) processEventFunc(gadgetCtx gadgets.GadgetContext) func(data []b
 				continue
 			}
 			timestampsOffsets = append(timestampsOffsets, member.Offset.Bytes())
+		}
+
+		if w, ok := wasmColumns[member.Name]; ok {
+			w.name = member.Name
+			w.start = member.Offset.Bytes()
+			typ, ok := member.Type.(*btf.Array)
+			if !ok {
+				w.size = 1 // FIXME
+			} else {
+				w.size = typ.Nelems * 1 // FIXME
+			}
 		}
 	}
 
@@ -484,8 +509,28 @@ func (t *Tracer) processEventFunc(gadgetCtx gadgets.GadgetContext) func(data []b
 			timestamps = append(timestamps, t)
 		}
 
+		// TODO: this is kinda duplicated with logic in GetGadgetInfo. See comment there.
 		blob := types.NewBlobEvent()
+
+		wasmColumnSetters := make(map[string]func(ev *types.BlobEvent, v string))
+		for _, wasmColumn := range wasmColumns {
+			_, setter := blob.AddString(wasmColumn.name)
+			wasmColumnSetters[wasmColumn.name] = setter
+		}
 		blob.Allocate()
+
+		for name, wasmColumn := range wasmColumns {
+			methodName := "column_" + wasmColumn.name
+			inputBuffer := make([]byte, wasmColumn.size)
+			copy(inputBuffer, data[wasmColumn.start:wasmColumn.start+wasmColumn.size])
+
+			result, err := t.wasmInstance.Invoke(t.newHostCallContext(),
+				methodName, inputBuffer)
+			if err != nil {
+				logger.Warnf("invoking %s in wasm: %w", methodName, err)
+			}
+			wasmColumnSetters[name](blob, string(result))
+		}
 
 		// set ebpf data
 		b := blob.Blob()
@@ -643,6 +688,8 @@ func (t *Tracer) Run(gadgetCtx gadgets.GadgetContext) error {
 
 	t.config.ProgContent = info.ProgContent
 	t.config.WasmContent = info.WasmContent
+	t.config.Columns = info.Columns
+
 	t.spec, err = loadSpec(t.config.ProgContent)
 	if err != nil {
 		return err

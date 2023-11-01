@@ -181,6 +181,37 @@ func getGadgetInfo(params *params.Params, args []string, logger logger.Logger) (
 		return nil, err
 	}
 
+	// Add some extra columns here, like from wasm
+	// TODO: There is an architectural issue with this approach, the instance of NewBlobEvent()
+	// cannot be passed to the tracer instance, so there is some code duplication and the code
+	// in both places has to match in order to work.
+	blob := types.NewBlobEvent()
+
+	eventStructureName, eventStruct := getAnyMapElem(ret.GadgetMetadata.Structs)
+	if eventStruct == nil {
+		return nil, fmt.Errorf("struct not found in gadget metadata")
+	}
+
+	fields := []types.Field{}
+
+	// Add virtual columns from wasm
+	for _, c := range ret.Columns {
+		if !c.WasmHandler {
+			continue
+		}
+		col, _ := blob.AddString(c.Name + "2") // FIXME: should replace current column
+		ret.Columns = append(ret.Columns, col)
+		fields = append(fields, types.Field{
+			Name: c.Name + "2",
+			Attributes: types.FieldAttributes{
+				Width: 30,
+			},
+		})
+	}
+
+	eventStruct.Fields = append(eventStruct.Fields, fields...)
+	ret.GadgetMetadata.Structs[*eventStructureName] = *eventStruct
+
 	return ret, nil
 }
 
@@ -718,6 +749,7 @@ func calculateColumnsForClient(gadgetMetadata *types.GadgetMetadata, progContent
 	}
 
 	colNames := map[string]struct{}{}
+	colNamesWasm := map[string]struct{}{}
 
 	eventStruct, ok := gadgetMetadata.Structs[eventType.Name]
 	if !ok {
@@ -726,6 +758,9 @@ func calculateColumnsForClient(gadgetMetadata *types.GadgetMetadata, progContent
 
 	for _, field := range eventStruct.Fields {
 		colNames[field.Name] = struct{}{}
+		if field.Attributes.WasmHandler {
+			colNamesWasm[field.Name] = struct{}{}
+		}
 	}
 
 	columns := []types.ColumnDesc{}
@@ -737,6 +772,7 @@ func calculateColumnsForClient(gadgetMetadata *types.GadgetMetadata, progContent
 		if !ok {
 			continue
 		}
+		_, wasmHandler := colNamesWasm[member.Name]
 
 		switch member.Type.TypeName() {
 		case types.L3EndpointTypeName:
@@ -772,9 +808,10 @@ func calculateColumnsForClient(gadgetMetadata *types.GadgetMetadata, progContent
 		}
 
 		col := types.ColumnDesc{
-			Name:   member.Name,
-			Type:   *rType,
-			Offset: uintptr(member.Offset.Bytes()),
+			Name:        member.Name,
+			Type:        *rType,
+			Offset:      uintptr(member.Offset.Bytes()),
+			WasmHandler: wasmHandler,
 		}
 
 		columns = append(columns, col)

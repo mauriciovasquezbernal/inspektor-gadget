@@ -95,10 +95,11 @@ type Type struct {
 // Column describes how a column is built. It's basically a serializable version of
 // columns.DynamicField
 type ColumnDesc struct {
-	Name   string
-	Index  int // -1: virtual, 0: ebpf, 1: fixed length, 1+ strings
-	Type   Type
-	Offset uintptr
+	Name        string
+	Index       int // -1: virtual, 0: ebpf, 1: fixed length, 1+ strings
+	Type        Type
+	Offset      uintptr
+	WasmHandler bool
 }
 
 type GadgetInfo struct {
