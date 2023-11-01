@@ -37,6 +37,7 @@ structs:
         template: uid
     - name: name
       attributes:
+        wasmHandler: true
         width: 30
     - name: qr
       attributes:
