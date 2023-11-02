@@ -117,9 +117,12 @@ func GetGadgetImage(ctx context.Context, image string, authOpts *AuthOptions, pu
 		return nil, fmt.Errorf("getting ebpf program: %w", err)
 	}
 
-	wasm, err := getWasmProgramFromManifest(ctx, imageStore, manifestWasm)
-	if err != nil {
-		return nil, fmt.Errorf("getting ebpf program: %w", err)
+	wasm := []byte{}
+	if manifestWasm != nil {
+		wasm, err = getWasmProgramFromManifest(ctx, imageStore, manifestWasm)
+		if err != nil {
+			return nil, fmt.Errorf("getting ebpf program: %w", err)
+		}
 	}
 
 	metadata, err := getMetadataFromManifest(ctx, imageStore, manifestHost)

@@ -182,7 +182,7 @@ func (t *Tracer) installTracer(params *params.Params) error {
 	engine := wazero.Engine()
 
 	var err error
-	if t.config.WasmContent != nil {
+	if len(t.config.WasmContent) != 0 {
 		host := t.newWasmHost(t.gadgetCtx.Logger())
 		t.wasmModule, err = engine.New(ctx, host, t.config.WasmContent, &wapc.ModuleConfig{
 			Logger: func(msg string) {
