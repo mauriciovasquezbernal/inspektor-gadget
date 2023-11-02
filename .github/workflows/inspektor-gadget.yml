@@ -1040,6 +1040,8 @@ jobs:
         uses: ./.github/actions/setup-minikube
         with:
           runtime: ${{ matrix.runtime }}
+      - name: Setup tmate session
+        uses: mxschmitt/action-tmate@v3
       - name: Run integration for container runtime ${{ matrix.runtime }}
         id: integration-tests
         run: |
