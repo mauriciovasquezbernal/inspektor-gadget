@@ -4,6 +4,7 @@ env:
   CONTAINER_REPO: ${{ github.repository }}
   GO_VERSION: 1.21.3
   AZURE_AKS_CLUSTER_PREFIX: ig-ci-aks-
+  AWS_EKS_CLUSTER_PREFIX: ig-ci-eks-
   DEFAULT_DNSTESTER_IMAGE: ghcr.io/inspektor-gadget/dnstester:latest
   DEFAULT_EBPF_BUILDER_IMAGE: ghcr.io/inspektor-gadget/ebpf-builder:latest
 concurrency:
@@ -1107,6 +1108,7 @@ jobs:
       aro: ${{ steps.set_output.outputs.aro }}
       aks: ${{ steps.set_output.outputs.aks }}
       cosign: ${{ steps.set_output.outputs.cosign }}
+      eks: ${{ steps.set_output.outputs.eks }}
     steps:
       # Secrets cannot be used as if condition, use job output as workaround.
       # https://github.com/actions/runner/issues/520
@@ -1121,6 +1123,8 @@ jobs:
           AZURE_AKS_RESOURCE_GROUP: '${{ secrets.AZURE_AKS_RESOURCE_GROUP }}'
           COSIGN_PASSWORD: '${{ secrets.COSIGN_PASSWORD }}'
           COSIGN_PRIVATE_KEY: '${{ secrets.COSIGN_PRIVATE_KEY }}'
+          AWS_ACCESS_KEY_ID: '${{ secrets.AWS_ACCESS_KEY_ID }}'
+          AWS_SECRET_ACCESS_KEY: '${{ secrets.AWS_SECRET_ACCESS_KEY }}'
         run: |
           if [[ "${OPENSHIFT_SERVER}" != "" && \
                 "${OPENSHIFT_USER}" != "" && \
@@ -1153,6 +1157,15 @@ jobs:
           else
             echo "Secrets to use cosign were not configured in the repo"
             echo "cosign=false" >> $GITHUB_OUTPUT
+          fi
+
+          if [[ "${AWS_ACCESS_KEY_ID}" != "" && "${AWS_SECRET_ACCESS_KEY}" != "" ]]; \
+          then
+            echo "Secrets to use an EKS cluster were configured in the repo"
+            echo "eks=true" >> $GITHUB_OUTPUT
+          else
+            echo "Secrets to use an EKS cluster were not configured in the repo"
+            echo "eks=false" >> $GITHUB_OUTPUT
           fi
 
   public-key-check:
@@ -1473,6 +1486,76 @@ jobs:
         gadget_tag: ${{ steps.set-repo-determine-image-tag.outputs.gadget-tag }}
         test_summary_suffix: "aro"
 
+  test-integration-eks:
+    name: Integration tests on EKS
+    # level: 4
+    needs:
+      - check-secrets
+      - test-unit
+      - build-clients
+      - build-ig
+      - build-gadget-container-images
+      - publish-gadget-images-manifest
+      - build-and-push-gadgets
+    if: needs.check-secrets.outputs.eks == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64]
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    steps:
+    - uses: actions/checkout@v4
+    - name: Setup go
+      uses: actions/setup-go@v5
+      with:
+        go-version: ${{ env.GO_VERSION }}
+        cache: true
+    - name: Set container repository and determine image tag
+      id: set-repo-determine-image-tag
+      uses: ./.github/actions/set-container-repo-and-determine-image-tag
+      with:
+        registry: ${{ env.REGISTRY }}
+        container-image: ${{ env.CONTAINER_REPO }}
+    - name: Craft cluster name
+      shell: bash
+      run: |
+        echo "CLUSTER_NAME=${{ env.AWS_EKS_CLUSTER_PREFIX }}${{ matrix.arch }}-${RANDOM}" >> $GITHUB_ENV
+    - name: Install eksctl
+      run: |
+        ARCH=amd64
+        PLATFORM=$(uname -s)_$ARCH
+        curl -sLO "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_$PLATFORM.tar.gz"
+        curl -sL "https://github.com/eksctl-io/eksctl/releases/latest/download/eksctl_checksums.txt" | grep $PLATFORM | sha256sum --check
+        tar -xzf eksctl_$PLATFORM.tar.gz -C /tmp && rm eksctl_$PLATFORM.tar.gz
+        sudo mv /tmp/eksctl /usr/local/bin
+    - name: Create EKS cluster ${{ env.CLUSTER_NAME }}
+      shell: bash
+      run: |
+        # We need to use big nodes, otherwise integration tests fail because the node can't handle
+        # many gadgets running on parallel
+        node_type='t2.xlarge'
+        # TODO: arm64
+
+        eksctl create cluster --name ${{ env.CLUSTER_NAME }} --region us-east-2 --tags ig-ci=true -t $node_type
+    - name: Run integration tests
+      uses: ./.github/actions/run-integration-tests
+      with:
+        kubernetes_distribution: "eks-AmazonLinux"
+        kubernetes_architecture: "${{ matrix.arch }}"
+        container_repo: ${{ steps.set-repo-determine-image-tag.outputs.container-repo }}
+        image_tag: ${{ steps.set-repo-determine-image-tag.outputs.image-tag }}
+        gadget_repository: ${{ steps.set-repo-determine-image-tag.outputs.gadget-repository }}
+        gadget_tag: ${{ steps.set-repo-determine-image-tag.outputs.gadget-tag }}
+        test_summary_suffix: "EKS-${{ matrix.arch }}"
+    - name: Delete EKS cluster ${{ env.CLUSTER_NAME }}
+      if: always()
+      shell: bash
+      run: |
+        eksctl delete cluster --name ${{ env.CLUSTER_NAME }} --region us-east-2
+
   test-integration-minikube:
     name: Integr. tests
     # level: 3
@@ -1544,6 +1627,7 @@ jobs:
       - test-integration-minikube
       - test-integration-aks
       - test-integration-aro
+      - test-integration-eks
       - test-integration-k8s-ig
       - test-integration-non-k8s-ig
     runs-on: ubuntu-latest
@@ -1574,6 +1658,7 @@ jobs:
       - test-integration-minikube
       - test-integration-aks
       - test-integration-aro
+      - test-integration-eks
       - test-components
       - build-ig-cwe
       - test-ig
