@@ -71,6 +71,24 @@ func (i *wasmOperatorInstance) fieldAccessorSetString(ctx context.Context, m wap
 
 	str, err := stringFromStack(m, stack, 2)
 	if err == nil {
-		acc.Set(data, []byte(str))
+		buf := []byte(str)
+
+		// fill the string with 0s if it's a static field
+		s := acc.Size()
+		if s != 0 {
+			if len(buf) > int(s) {
+				i.gadgetCtx.Logger().Warnf("string too long: %d > %d", len(buf), s)
+				stack[0] = 0
+				return
+			}
+
+			buf = append(buf, make([]byte, int(s)-len(buf))...)
+		}
+
+		if err := acc.Set(data, buf); err != nil {
+			i.gadgetCtx.Logger().Warnf("setting string failed: %v", err)
+			stack[0] = 0
+			return
+		}
 	}
 }

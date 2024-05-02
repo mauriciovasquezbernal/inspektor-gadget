@@ -14,21 +14,34 @@
 
 package main
 
+import "fmt"
+
 //export init
 func gadgetInit() {
 	Log("hello from wasm")
-	ds := GetDataSource("exec")
-	ds2 := NewDataSource("foobydoo")
-	ds2acc := ds2.AddField("wasm")
-	comm := ds.GetField("comm")
-	ds.Subscribe(func(source DataSource, data Data) {
-		commstr := comm.String(data)
-		Log("wasm got event")
-		Log("comm is " + commstr)
+	ds := GetDataSource("dns")
 
-		data2 := ds2.NewData()
-		ds2acc.SetString(data2, "demo:"+commstr)
-		ds2.EmitAndRelease(data2)
+	nameF := ds.GetField("name")
+
+	ds.Subscribe(func(source DataSource, data Data) {
+		payload := nameF.String(data)
+
+		var str string
+		for i := 0; i < len(payload); i++ {
+			length := int(payload[i])
+			if length == 0 {
+				break
+			}
+			if i+1+length < len(payload) {
+				str += string(payload[i+1:i+1+length]) + "."
+			} else {
+				Log(fmt.Sprintf("invalid payload %+v\n", payload))
+				return
+			}
+			i += length
+		}
+
+		nameF.SetString(data, str)
 	}, 0)
 }
 
