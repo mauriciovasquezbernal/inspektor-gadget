@@ -15,13 +15,16 @@
 package wasm
 
 import (
+	"bytes"
 	"context"
 	_ "embed"
+	"errors"
 	"fmt"
 	"os"
 	"sync"
 	"time"
 
+	ocispec "github.com/opencontainers/image-spec/specs-go/v1"
 	log "github.com/sirupsen/logrus"
 	"github.com/tetratelabs/wazero"
 	wapi "github.com/tetratelabs/wazero/api"
@@ -29,17 +32,16 @@ import (
 	"github.com/tetratelabs/wazero/sys"
 
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-service/api"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/oci"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
 )
 
 const (
 	ParamGlobalAllowHostFS = "wasm-global-allow-host-fs" // TODO
 	ParamAllowHostFS       = "wasm-allow-host-fs"
-)
 
-//go:embed test/prog.wasm
-var wasmBinary []byte
+	wasmObjectMediaType = "application/vnd.gadget.wasm.program.v1+binary"
+)
 
 type wasmOperator struct{}
 
@@ -47,15 +49,54 @@ func (w *wasmOperator) Name() string {
 	return "wasm"
 }
 
-func (w *wasmOperator) Init(params *params.Params) error {
+func (w *wasmOperator) Description() string {
+	return "TODO"
+}
+
+func (w *wasmOperator) InstantiateImageOperator(
+	gadgetCtx operators.GadgetContext,
+	desc ocispec.Descriptor,
+	paramValues api.ParamValues,
+) (
+	operators.ImageOperatorInstance, error,
+) {
+	return &wasmOperatorInstance{
+		desc:        desc,
+		gadgetCtx:   gadgetCtx,
+		memMap:      map[uint32]any{},
+		allowHostFS: paramValues[ParamAllowHostFS] == "true",
+	}, nil
+}
+
+type wasmOperatorInstance struct {
+	desc        ocispec.Descriptor
+	rt          wazero.Runtime
+	gadgetCtx   operators.GadgetContext
+	mod         wapi.Module
+	memMap      map[uint32]any
+	memCtr      uint32
+	memLock     sync.RWMutex
+	allowHostFS bool
+}
+
+func (w *wasmOperatorInstance) Name() string {
+	return "wasm"
+}
+
+func (w *wasmOperatorInstance) Prepare(gadgetCtx operators.GadgetContext) error {
+	err := w.init(gadgetCtx)
+	if err != nil {
+		return fmt.Errorf("initializing wasm: %w", err)
+	}
+	err = w.Init(gadgetCtx)
+	if err != nil {
+		return fmt.Errorf("initializing wasm guest: %w", err)
+	}
+
 	return nil
 }
 
-func (w *wasmOperator) GlobalParams() api.Params {
-	return nil
-}
-
-func (w *wasmOperator) InstanceParams() api.Params {
+func (w *wasmOperatorInstance) ExtraParams(gadgetCtx operators.GadgetContext) api.Params {
 	return api.Params{
 		{
 			Key:          ParamAllowHostFS,
@@ -64,38 +105,6 @@ func (w *wasmOperator) InstanceParams() api.Params {
 			TypeHint:     api.TypeBool,
 		},
 	}
-}
-
-func (w *wasmOperator) InstantiateDataOperator(gadgetCtx operators.GadgetContext, instanceParamValues api.ParamValues) (operators.DataOperatorInstance, error) {
-	inst := &wasmOperatorInstance{
-		gadgetCtx:   gadgetCtx,
-		memMap:      map[uint32]any{},
-		allowHostFS: instanceParamValues[ParamAllowHostFS] == "true",
-	}
-	err := inst.init(gadgetCtx)
-	if err != nil {
-		return nil, fmt.Errorf("initializing wasm: %w", err)
-	}
-	err = inst.Init(gadgetCtx)
-	if err != nil {
-		return nil, fmt.Errorf("initializing wasm guest: %w", err)
-	}
-	return inst, nil
-}
-
-func (w *wasmOperator) Priority() int {
-	return 0
-}
-
-type wasmOperatorInstance struct {
-	rt          wazero.Runtime
-	gadgetCtx   operators.GadgetContext
-	mod         wapi.Module
-	memMap      map[uint32]any
-	memCtr      uint32
-	memLock     sync.RWMutex
-	lock        sync.Mutex
-	allowHostFS bool
 }
 
 func (i *wasmOperatorInstance) addToMemMap(obj any) uint32 {
@@ -248,7 +257,17 @@ func (i *wasmOperatorInstance) init(gadgetCtx operators.GadgetContext) error {
 
 	wasi_snapshot_preview1.MustInstantiate(ctx, i.rt)
 
-	mod, err := i.rt.InstantiateWithConfig(ctx, wasmBinary, config.WithArgs("wasi", os.Args[1]))
+	reader, err := oci.GetContentFromDescriptor(gadgetCtx.Context(), i.desc)
+	if err != nil {
+		return fmt.Errorf("getting wasm program: %w", err)
+	}
+	defer reader.Close()
+
+	buf := new(bytes.Buffer)
+	buf.ReadFrom(reader)
+
+	// TODO: don't pass os.Args[1] directly
+	mod, err := i.rt.InstantiateWithConfig(ctx, buf.Bytes(), config.WithArgs("wasi", os.Args[1]))
 	if err != nil {
 		// Note: Most compilers do not exit the module after running "_start",
 		// unless there was an error. This allows you to call exported functions.
@@ -262,26 +281,20 @@ func (i *wasmOperatorInstance) init(gadgetCtx operators.GadgetContext) error {
 	return err
 }
 
-func (i *wasmOperatorInstance) Name() string {
-	return "wasm"
-}
-
 func (i *wasmOperatorInstance) Init(gadgetCtx operators.GadgetContext) error {
 	fn := i.mod.ExportedFunction("init")
 	if fn == nil {
 		return nil
 	}
-	_, err := fn.Call(gadgetCtx.Context())
-	return err
-}
+	ret, err := fn.Call(gadgetCtx.Context())
+	if err != nil {
+		return err
 
-func (i *wasmOperatorInstance) PreStart(gadgetCtx operators.GadgetContext) error {
-	fn := i.mod.ExportedFunction("preStart")
-	if fn == nil {
-		return nil
 	}
-	_, err := fn.Call(gadgetCtx.Context())
-	return err
+	if ret[0] != 0 {
+		return errors.New("init failed")
+	}
+	return nil
 }
 
 func (i *wasmOperatorInstance) Start(gadgetCtx operators.GadgetContext) error {
@@ -289,8 +302,15 @@ func (i *wasmOperatorInstance) Start(gadgetCtx operators.GadgetContext) error {
 	if fn == nil {
 		return nil
 	}
-	_, err := fn.Call(gadgetCtx.Context())
-	return err
+	ret, err := fn.Call(gadgetCtx.Context())
+	if err != nil {
+		return err
+
+	}
+	if ret[0] != 0 {
+		return errors.New("start failed")
+	}
+	return nil
 }
 
 func (i *wasmOperatorInstance) Stop(gadgetCtx operators.GadgetContext) error {
@@ -314,5 +334,5 @@ func (i *wasmOperatorInstance) Stop(gadgetCtx operators.GadgetContext) error {
 }
 
 func init() {
-	operators.RegisterDataOperator(&wasmOperator{})
+	operators.RegisterOperatorForMediaType(wasmObjectMediaType, &wasmOperator{})
 }
