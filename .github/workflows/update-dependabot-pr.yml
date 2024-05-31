@@ -1,0 +1,41 @@
+name: Dependabot go mod updates
+env:
+  GO_VERSION: 1.22.0
+on:
+  pull_request:
+    types: [opened, synchronize]
+
+permissions:
+  contents: write
+  pull-requests: read
+jobs:
+  build:
+    if: ${{ github.actor == 'dependabot[bot]' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Dependabot metadata
+        id: dependabot-metadata
+        uses: dependabot/fetch-metadata@v1
+      - uses: actions/checkout@v3
+        if: ${{ steps.dependabot-metadata.outputs.package-ecosystem == 'go_modules' }}
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - name: Setup go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+        id: go
+      - name: Run go mod tidy on examples
+        if: ${{ steps.dependabot-metadata.outputs.package-ecosystem == 'go_modules' }}
+        run: |
+            cd examples
+            go mod tidy
+      - name: Commit and push changes
+        if: ${{ steps.dependabot-metadata.outputs.package-ecosystem == 'go_modules' }}
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/$GITHUB_REPOSITORY
+          git add examples/go.mod examples/go.sum
+          git commit -m "update examples/go.mod"
+          git push -u origin HEAD:${{ github.event.pull_request.head.ref }}
