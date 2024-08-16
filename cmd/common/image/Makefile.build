@@ -44,3 +44,6 @@ btfgen: $(foreach ARCH,$(ARCHS),btfgen-$(ARCH))
 
 btfgen-%: $(OUTPUTDIR)/%.bpf.o
 	$(MAKE) -f $(MAKEFILE_DIR)/Makefile.build.btfgen BPF_OBJECT=$^ ARCH=$(subst amd64,x86_64,$*) btfs; \
+
+help-binary:
+	$(MAKE) -f $(MAKEFILE_DIR)/Makefile.build.help all

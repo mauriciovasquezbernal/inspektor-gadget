@@ -48,6 +48,12 @@ var makefile []byte
 //go:embed Makefile.build.btfgen
 var makefileBtfgen []byte
 
+//go:embed Makefile.build.help
+var makefileHelp []byte
+
+//go:embed help.asm
+var helpAsmFile []byte
+
 // It can be overridden at build time
 var builderImage = "ghcr.io/inspektor-gadget/ebpf-builder:latest"
 
@@ -227,6 +233,7 @@ func runBuild(cmd *cobra.Command, opts *cmdOpts) error {
 		MetadataPath:     conf.Metadata,
 		UpdateMetadata:   opts.updateMetadata,
 		ValidateMetadata: opts.validateMetadata,
+		HelpPath:         filepath.Join(opts.outputDir, "help.tar"),
 	}
 
 	if sourceDateEpoch, ok := os.LookupEnv("SOURCE_DATE_EPOCH"); ok {
@@ -264,6 +271,19 @@ func buildLocal(opts *cmdOpts, conf *buildFile) error {
 		"CFLAGS="+conf.CFlags,
 		"all",
 	)
+
+	// TODO: make this optional
+	helpAsmPath := filepath.Join(opts.outputDir, "help.asm")
+	if err := os.WriteFile(helpAsmPath, helpAsmFile, 0o644); err != nil {
+		return fmt.Errorf("writing Makefile: %w", err)
+	}
+
+	makefileHelpPath := filepath.Join(opts.outputDir, "Makefile.build.help")
+	if err := os.WriteFile(makefileHelpPath, makefileHelp, 0o644); err != nil {
+		return fmt.Errorf("writing Makefile: %w", err)
+	}
+
+	buildCmd.Args = append(buildCmd.Args, "help-binary")
 
 	if opts.btfgen {
 		makefileBtfgenPath := filepath.Join(opts.outputDir, "Makefile.build.btfgen")

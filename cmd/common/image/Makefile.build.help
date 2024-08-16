@@ -1,0 +1,14 @@
+# This makefile is used by the build command, don't execute it manually
+
+NASM ?= nasm
+LD ?= ld
+TAR ?= tar
+
+all: $(OUTPUTDIR)/help.tar
+
+$(OUTPUTDIR)/help: $(OUTPUTDIR)/help.asm
+	$(NASM) -f elf64 -o $@.o $<
+	$(LD) -o $@ $@.o
+
+$(OUTPUTDIR)/help.tar: $(OUTPUTDIR)/help
+	cd $(dir $<) && $(TAR) -C $(dir $<) -cf $@ $(notdir $<)

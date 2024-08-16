@@ -961,13 +961,26 @@ func getManifestForHost(ctx context.Context, target oras.ReadOnlyTarget, image s
 	}
 
 	var manifestDesc *ocispec.Descriptor
+
+	// try to look for ebpf variants
 	for _, indexManifest := range index.Manifests {
 		// TODO: Check docker code
-		if indexManifest.Platform.Architecture == runtime.GOARCH {
+		if indexManifest.Platform.OS == "ebpf" && indexManifest.Platform.Architecture == runtime.GOARCH {
 			manifestDesc = &indexManifest
 			break
 		}
 	}
+
+	if manifestDesc == nil {
+		for _, indexManifest := range index.Manifests {
+			// TODO: Check docker code
+			if indexManifest.Platform.Architecture == runtime.GOARCH {
+				manifestDesc = &indexManifest
+				break
+			}
+		}
+	}
+
 	if manifestDesc == nil {
 		return nil, fmt.Errorf("no manifest found for architecture %q", runtime.GOARCH)
 	}
