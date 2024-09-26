@@ -123,10 +123,10 @@ func (k *UidGidResolver) InstantiateDataOperator(gadgetCtx operators.GadgetConte
 			for _, uid := range uids {
 				outName, err := annotations.GetTargetNameFromAnnotation(logger, "uidgidresolver.uid", uid, "uidgidresolver.target")
 				if err != nil {
-					return nil, err
+					logger.Warnf("failed to get target name for uid: %s", err)
+					continue
 				}
-
-				uidStrField, err := ds.AddField(outName, api.Kind_String)
+				uidStrField, err := datasource.AddFieldOnParentOrDatasource(uid, ds, outName, api.Kind_String)
 				if err != nil {
 					return nil, err
 				}
@@ -142,10 +142,10 @@ func (k *UidGidResolver) InstantiateDataOperator(gadgetCtx operators.GadgetConte
 			for _, gid := range gids {
 				outName, err := annotations.GetTargetNameFromAnnotation(logger, "uidgidresolver.gid", gid, "uidgidresolver.target")
 				if err != nil {
-					return nil, err
+					logger.Warnf("failed to get target name for gid: %s", err)
+					continue
 				}
-
-				gidStrField, err := ds.AddField(outName, api.Kind_String)
+				gidStrField, err := datasource.AddFieldOnParentOrDatasource(gid, ds, outName, api.Kind_String)
 				if err != nil {
 					return nil, err
 				}

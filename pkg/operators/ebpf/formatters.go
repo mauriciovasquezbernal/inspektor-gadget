@@ -98,7 +98,7 @@ func (i *ebpfInstance) initEnumFormatter(gadgetCtx operators.GadgetContext) erro
 				continue
 			}
 
-			out, err := ds.AddField(targetName, api.Kind_String)
+			out, err := datasource.AddFieldOnParentOrDatasource(in, ds, targetName, api.Kind_String)
 			if err != nil {
 				return err
 			}
@@ -180,7 +180,7 @@ func (i *ebpfInstance) initStackConverter(gadgetCtx operators.GadgetContext) err
 				i.logger.Warnf("Failed to get target name for enum field %q: %v", in.Name(), err)
 				continue
 			}
-			out, err := ds.AddField(targetName, api.Kind_String)
+			out, err := datasource.AddFieldOnParentOrDatasource(in, ds, targetName, api.Kind_String)
 			if err != nil {
 				return err
 			}
