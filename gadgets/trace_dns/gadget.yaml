@@ -1,119 +1,93 @@
-name: trace dns
-description: trace dns requests and responses
-homepageURL: https://inspektor-gadget.io/
-documentationURL: https://www.inspektor-gadget.io/docs/latest/gadgets/trace_dns
-sourceURL: https://github.com/inspektor-gadget/inspektor-gadget/tree/main/gadgets/trace_dns
+name: 'TODO: Fill the gadget name'
+description: 'TODO: Fill the gadget description'
+homepageURL: 'TODO: Fill the gadget homepage URL'
+documentationURL: 'TODO: Fill the gadget documentation URL'
+sourceURL: 'TODO: Fill the gadget source code URL'
 datasources:
   dns:
     fields:
-      anaddr:
-        annotations:
-          columns.width: "16"
-      comm:
-        annotations:
-          description: Process name
-          template: comm
       data:
         annotations:
-          columns.hidden: "true"
-          json.skip: "true"
+          description: 'TODO: Fill field description'
       data_len:
         annotations:
-          columns.hidden: "true"
-          json.skip: "true"
+          description: 'TODO: Fill field description'
       dns_off:
         annotations:
-          columns.hidden: "true"
-          json.skip: "true"
+          description: 'TODO: Fill field description'
       dst:
         annotations:
-          description: Destination endpoint
-          template: l4endpoint
-      gid:
-        annotations:
           columns.hidden: "true"
-          description: Group ID
-          template: uid
-      id:
+          description: 'TODO: Fill field description'
+      dst.addr_raw:
         annotations:
-          columns.hidden: "true"
+          description: 'TODO: Fill field description'
+      dst.port:
+        annotations:
+          description: 'TODO: Fill field description'
+      dst.proto:
+        annotations:
+          description: 'TODO: Fill field description'
+      dst.version:
+        annotations:
+          description: 'TODO: Fill field description'
       latency_ns:
         annotations:
-          columns.hidden: "true"
-          columns.width: "8"
-          description: DNS request latency
+          description: 'TODO: Fill field description'
       mntns_id:
         annotations:
-          description: Mount namespace inode id
-          template: ns
-      name:
-        annotations:
-          columns.width: "30"
+          description: 'TODO: Fill field description'
       netns_id:
         annotations:
-          description: Network namespace inode id
-          template: ns
-      num_answers:
-        annotations:
-          columns.hidden: "true"
-          description: Number of answers
+          description: 'TODO: Fill field description'
       pcomm:
         annotations:
-          columns.hidden: "true"
-          template: pcomm
-      pid:
-        annotations:
-          description: Process ID
-          template: pid
-      pkt_type:
-        annotations:
-          columns.hidden: "true"
-          columns.width: "8"
+          description: 'TODO: Fill field description'
       pkt_type_raw:
         annotations:
-          columns.hidden: "true"
+          description: 'TODO: Fill field description'
       ppid:
         annotations:
-          columns.hidden: "true"
-          description: Parent process ID
-          template: pid
-      qr:
-        annotations:
-          columns.minwidth: "2"
-          columns.width: "2"
-      qr_raw:
+          description: 'TODO: Fill field description'
+      proc:
         annotations:
           columns.hidden: "true"
-      qtype:
+          description: 'TODO: Fill field description'
+      proc.comm:
         annotations:
-          description: Query type
-      qtype_raw:
+          description: 'TODO: Fill field description'
+      proc.pid:
+        annotations:
+          description: 'TODO: Fill field description'
+      proc.tid:
+        annotations:
+          description: 'TODO: Fill field description'
+      proc.user:
         annotations:
           columns.hidden: "true"
-      rcode:
+          description: 'TODO: Fill field description'
+      proc.user.gid:
         annotations:
-          columns.minwidth: "8"
-          columns.width: "8"
-      rcode_raw:
+          description: 'TODO: Fill field description'
+      proc.user.uid:
         annotations:
-          columns.hidden: "true"
+          description: 'TODO: Fill field description'
       src:
         annotations:
-          description: Source endpoint
-          template: l4endpoint
-      tid:
-        annotations:
           columns.hidden: "true"
-          description: Thread ID
-          template: pid
-      timestamp:
+          description: 'TODO: Fill field description'
+      src.addr_raw:
         annotations:
-          template: timestamp
+          description: 'TODO: Fill field description'
+      src.port:
+        annotations:
+          description: 'TODO: Fill field description'
+      src.proto:
+        annotations:
+          description: 'TODO: Fill field description'
+      src.version:
+        annotations:
+          description: 'TODO: Fill field description'
       timestamp_raw:
         annotations:
-          columns.hidden: "true"
-      uid:
-        annotations:
-          columns.hidden: "true"
-          description: User ID
-          template: uid
+          description: 'TODO: Fill field description'
