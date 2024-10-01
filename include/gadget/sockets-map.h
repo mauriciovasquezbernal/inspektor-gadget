@@ -13,6 +13,8 @@
 // Necessary for the SEC() definition
 #include <bpf/bpf_helpers.h>
 
+#include <gadget/common.h>
+
 // This file is shared between the networking and tracing programs.
 // Therefore, avoid includes that are specific to one of these types of programs.
 // For example, don't include <linux/ip.h> nor <vmlinux.h> here.
@@ -244,5 +246,14 @@ gadget_socket_lookup(const struct sock *sk, __u32 netns)
 	return bpf_map_lookup_elem(&gadget_sockets, &key);
 }
 #endif
+
+static __always_inline void
+gadget_socket_fill_process(const struct sockets_value *skb_val, struct process *p) {
+	__builtin_memcpy(p->comm, skb_val->task, sizeof(p->comm));
+	p->pid = skb_val->pid_tgid >> 32;
+	p->tid = skb_val->pid_tgid;
+	p->user.uid = skb_val->uid_gid;
+	p->user.gid = skb_val->uid_gid >> 32;
+}
 
 #endif
