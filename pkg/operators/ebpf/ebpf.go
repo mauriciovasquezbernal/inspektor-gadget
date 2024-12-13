@@ -75,7 +75,11 @@ type param struct {
 }
 
 // ebpfOperator reads ebpf programs from OCI images and runs them
-type ebpfOperator struct{}
+type ebpfOperator struct {
+	gadgetContexts map[ebpf.ProgramID]operators.GadgetContext
+	programIDs     map[operators.GadgetContext][]ebpf.ProgramID
+	mapIDs         map[operators.GadgetContext][]ebpf.MapID
+}
 
 func (o *ebpfOperator) Name() string {
 	return "ebpf"
@@ -107,8 +111,9 @@ func (o *ebpfOperator) InstantiateImageOperator(
 	// TODO: do some pre-checks in here, maybe validate hashes, signatures, etc.
 
 	newInstance := &ebpfInstance{
-		gadgetCtx: gadgetCtx, // context usually should not be stored, but should we really carry it through all funcs?
-		done:      make(chan struct{}),
+		bpfOperator: o,
+		gadgetCtx:   gadgetCtx, // context usually should not be stored, but should we really carry it through all funcs?
+		done:        make(chan struct{}),
 
 		logger:  gadgetCtx.Logger(),
 		program: program,
@@ -158,7 +163,8 @@ func (o *ebpfOperator) InstantiateImageOperator(
 }
 
 type ebpfInstance struct {
-	mu sync.Mutex
+	mu          sync.Mutex
+	bpfOperator *ebpfOperator
 
 	config *viper.Viper
 
@@ -667,6 +673,44 @@ func (i *ebpfInstance) Start(gadgetCtx operators.GadgetContext) error {
 	}
 	i.collection = collection
 
+	// TODO: how to initialize it?
+	// TODO: locking?
+
+	if i.bpfOperator.gadgetContexts == nil {
+		i.bpfOperator.gadgetContexts = make(map[ebpf.ProgramID]operators.GadgetContext)
+	}
+
+	if i.bpfOperator.programIDs == nil {
+		i.bpfOperator.programIDs = make(map[operators.GadgetContext][]ebpf.ProgramID)
+	}
+
+	if i.bpfOperator.mapIDs == nil {
+		i.bpfOperator.mapIDs = make(map[operators.GadgetContext][]ebpf.MapID)
+	}
+
+	for _, p := range i.collection.Programs {
+		info, err := p.Info()
+		if err != nil {
+			continue
+		}
+
+		id, _ := info.ID()
+		i.bpfOperator.gadgetContexts[id] = gadgetCtx
+
+		i.bpfOperator.programIDs[gadgetCtx] = append(i.bpfOperator.programIDs[gadgetCtx], id)
+	}
+
+	for _, m := range i.collection.Maps {
+		info, err := m.Info()
+		if err != nil {
+			continue
+		}
+
+		id, _ := info.ID()
+
+		i.bpfOperator.mapIDs[gadgetCtx] = append(i.bpfOperator.mapIDs[gadgetCtx], id)
+	}
+
 	for name, m := range i.collection.Maps {
 		gadgetCtx.SetVar(operators.MapPrefix+name, m)
 	}
@@ -825,6 +869,9 @@ func (i *ebpfInstance) DetachContainer(container *containercollection.Container)
 	return nil
 }
 
+var ebpfOp = &ebpfOperator{}
+
 func init() {
-	operators.RegisterOperatorForMediaType(eBPFObjectMediaType, &ebpfOperator{})
+	operators.RegisterOperatorForMediaType(eBPFObjectMediaType, ebpfOp)
+	operators.RegisterDataOperator(ebpfOp)
 }

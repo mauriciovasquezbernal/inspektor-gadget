@@ -41,6 +41,7 @@ import (
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/traceloop/tracer"
 
 	// Another blank import for the used operator
+	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/bpfstatsoperator"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/btfgen"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/ebpf"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/filter"
