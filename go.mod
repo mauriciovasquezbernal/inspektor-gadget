@@ -128,6 +128,7 @@ require (
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
 	github.com/go-openapi/jsonreference v0.21.0 // indirect
 	github.com/go-openapi/swag v0.23.0 // indirect
+	github.com/gofrs/flock v0.12.1 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.4 // indirect
@@ -234,4 +235,4 @@ replace github.com/gopacket/gopacket => github.com/gopacket/gopacket v1.3.2-0.20
 
 replace k8s.io/component-base => k8s.io/component-base v0.0.0-20240417101527-62c04b35eff6
 
-replace oras.land/oras-go/v2 => oras.land/oras-go/v2 v2.0.0-20240123101058-64fedf45bfd3
+replace oras.land/oras-go/v2 => github.com/inspektor-gadget/oras-go/v2 v2.0.0-20250120193850-1ad0dd1286ae
