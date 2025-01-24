@@ -300,26 +300,4 @@ more information.
 
 The main difference for the users of the Golang API is that image-based Gadgets
 don't provide a Golang package, instead a generic runner needs to be used to run
-them. We suggest to check the
-[examples](https://github.com/inspektor-gadget/inspektor-gadget/tree/%IG_BRANCH%/examples/gadgets)
-available to get a better understanding of how to run image-based Gadgets
-directly from your application.
-
-Another big difference is how the Gadget image is handled as by default it's not
-embedded in the application binary. A developer has the following options:
-- Download the image from internet (or use from the local store):
-  By default the Gadget runner will try to pull the image from the internet.
-  This is the approach used by the
-  [trace_open](https://github.com/inspektor-gadget/inspektor-gadget/tree/%IG_BRANCH%/examples/gadgets/simple/trace_open)
-  and
-  [trace_dns](https://github.com/inspektor-gadget/inspektor-gadget/tree/%IG_BRANCH%/examples/gadgets/simple/trace_dns)
-  examples.
-- Load from a file: You can run a Gadget image exported by the `ig image export`
-  command as done in the
-  [from_file](https://github.com/inspektor-gadget/inspektor-gadget/tree/%IG_BRANCH%/examples/gadgets/simple/from_file)
-  example.
-- Embeed the image within your application binary: The last option is to embed
-  the image in the binary application itself as shown in
-  [from_memory](https://github.com/inspektor-gadget/inspektor-gadget/tree/%IG_BRANCH%/examples/gadgets/simple/from_memory)
-
-We're working to provide a better documentation on [Golang API](../api/golang).
+them. Check the [Golang API](../api/golang) to learn more about it.
