@@ -55,8 +55,6 @@ import (
 	// import for gadgettracermanager entrypoint"
 	"github.com/inspektor-gadget/inspektor-gadget/gadget-container/entrypoint"
 	// Blank import for some operators
-	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/btfgen"
-	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/ebpf"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/filter"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/formatters"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/kubeipresolver"
@@ -67,7 +65,6 @@ import (
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/socketenricher"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/sort"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/uidgidresolver"
-	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/wasm"
 
 	gadgetservice "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-service"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-service/api"

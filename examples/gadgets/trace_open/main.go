@@ -24,10 +24,8 @@ import (
 
 	// Import the operators we need:
 	// - ocihandler: to handle OCI images
-	// - ebpf: handle ebpf programs
 	// - simple: building block for our operator
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
-	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/ebpf"
 	ocihandler "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/oci-handler"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators/simple"
 
