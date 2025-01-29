@@ -85,6 +85,25 @@ func (l *localManager) Dependencies() []string {
 	return nil
 }
 
+type LocalManagerGlobalParams struct {
+	// Create alias for this type here?
+	Runtimes               []*containerutilsTypes.RuntimeConfig
+	EnrichWithK8sApiserver bool
+	//...
+}
+
+type LocalManagerParams struct {
+	ContainerName string
+	Host          bool
+}
+
+func (l *LocalManagerParams) ToMap() map[string]string {
+	return map[string]string{
+		"operator.LocalManager.containername": l.ContainerName,
+		"operator.LocalManager.host":          fmt.Sprintf("%t", l.Host),
+	}
+}
+
 func (l *localManager) GlobalParamDescs() params.ParamDescs {
 	return params.ParamDescs{
 		{
@@ -179,6 +198,57 @@ func (l *localManager) CanOperateOn(gadget gadgets.GadgetDesc) bool {
 	log.Debugf("> isAttacher: %v", isAttacher)
 
 	return isMountNsMapSetter || canEnrichEvent || isAttacher
+}
+
+func (l *localManager) InitWithParams(params *LocalManagerGlobalParams) error {
+	l.rc = params.Runtimes
+
+	for _, runtime := range l.rc {
+		cleanSocketPath, err := securejoin.SecureJoin(host.HostRoot, runtime.SocketPath)
+		if err != nil {
+			log.Debugf("securejoin failed: %s", err)
+			continue
+		}
+
+		if _, err := os.Stat(cleanSocketPath); err != nil {
+			return fmt.Errorf("runtime %q with non-existent socketPath %q", runtime.Name, runtime.SocketPath)
+		}
+		runtime.SocketPath = cleanSocketPath
+	}
+
+	pidOne := uint32(1)
+	mntns, err := containerutils.GetMntNs(int(pidOne))
+	if err != nil {
+		return fmt.Errorf("getting mount namespace ID for host PID %d: %w", pidOne, err)
+	}
+
+	// We need this fake container for gadget which rely only on the Attacher
+	// concept:
+	// * Network gadget will get the netns corresponding to PID 1 on their
+	//   own.
+	// * Others, like traceloop or advise seccomp-profile, need the mount
+	//   namespace ID to bet set.
+	l.fakeContainer = &containercollection.Container{
+		Runtime: containercollection.RuntimeMetadata{
+			BasicRuntimeMetadata: types.BasicRuntimeMetadata{
+				ContainerPID: pidOne,
+			},
+		},
+		Mntns: mntns,
+	}
+
+	additionalOpts := []containercollection.ContainerCollectionOption{}
+	if params.EnrichWithK8sApiserver {
+		additionalOpts = append(additionalOpts, containercollection.WithKubernetesEnrichment("", nil))
+	}
+
+	igManager, err := igmanager.NewManager(l.rc, additionalOpts)
+	if err != nil {
+		log.Warnf("Failed to create container-collection")
+		log.Debugf("Failed to create container-collection: %s", err)
+	}
+	l.igManager = igManager
+	return nil
 }
 
 func (l *localManager) Init(operatorParams *params.Params) error {
