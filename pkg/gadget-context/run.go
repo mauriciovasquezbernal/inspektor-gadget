@@ -45,23 +45,35 @@ func (c *GadgetContext) initAndPrepareOperators(paramValues api.ParamValues) ([]
 		opParamPrefix := fmt.Sprintf("operator.%s", op.Name())
 
 		// Get and fill params
-		globalParams := op.GlobalParams().AddPrefix(opParamPrefix)
+
+		//globalParams := op.GlobalParams().AddPrefix(opParamPrefix)
 		instanceParams := op.InstanceParams().AddPrefix(opParamPrefix)
 		opParamValues := paramValues.ExtractPrefixedValues(opParamPrefix)
 
-		err := apihelpers.Validate(globalParams, opParamValues)
-		if err != nil {
-			return nil, fmt.Errorf("validating global params for operator %q: %w", op.Name(), err)
-		}
+		// TODO[mauricio]: This doesn't make sense. The operators are already initialized at this point
+		//err := apihelpers.Validate(globalParams, opParamValues)
+		//if err != nil {
+		//	return nil, fmt.Errorf("validating global params for operator %q: %w", op.Name(), err)
+		//}
 
-		err = apihelpers.Validate(instanceParams, opParamValues)
+		err := apihelpers.Validate(instanceParams, opParamValues)
 		if err != nil {
 			return nil, fmt.Errorf("validating instance params for operator %q: %w", op.Name(), err)
 		}
 
-		opInst, err := op.InstantiateDataOperator(c, opParamValues)
-		if err != nil {
-			return nil, fmt.Errorf("instantiating operator %q: %w", op.Name(), err)
+		var opInst operators.DataOperatorInstance
+
+		if d2, ok := op.(operators.DataOperator2); ok {
+			// TODO: how to get parameters?
+			opInst, err = d2.InstantiateDataOperator2(c, opParamValues)
+			if err != nil {
+				return nil, fmt.Errorf("instantiating operator %q: %w", op.Name(), err)
+			}
+		} else {
+			opInst, err = op.InstantiateDataOperator(c, opParamValues)
+			if err != nil {
+				return nil, fmt.Errorf("instantiating operator %q: %w", op.Name(), err)
+			}
 		}
 		if opInst == nil {
 			log.Debugf("> skipped %s", op.Name())

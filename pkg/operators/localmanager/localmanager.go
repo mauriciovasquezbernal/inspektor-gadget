@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime/debug"
 	"slices"
 	"strings"
 
@@ -252,6 +253,8 @@ func (l *localManager) InitWithParams(params *LocalManagerGlobalParams) error {
 }
 
 func (l *localManager) Init(operatorParams *params.Params) error {
+	debug.PrintStack()
+
 	rc := make([]*containerutilsTypes.RuntimeConfig, 0)
 
 	runtimesParam := operatorParams.Get(Runtimes)
@@ -359,11 +362,15 @@ func (l *localManager) Instantiate(gadgetContext operators.GadgetContext, gadget
 	_, canEnrichEventFromNetNs := gadgetContext.GadgetDesc().EventPrototype().(operators.ContainerInfoFromNetNSID)
 	canEnrichEvent := canEnrichEventFromMountNs || canEnrichEventFromNetNs
 
+	host := params.Get(Host).AsBool()
+	containerName := params.Get(ContainerName).AsString()
+
 	traceInstance := &localManagerTrace{
 		manager:            l,
 		enrichEvents:       canEnrichEvent,
 		attachedContainers: make(map[*containercollection.Container]struct{}),
-		params:             params,
+		host:               host,
+		containerName:      containerName,
 		gadgetInstance:     gadgetInstance,
 		gadgetCtx:          gadgetContext,
 	}
@@ -384,11 +391,16 @@ type localManagerTrace struct {
 	// Keep a map to attached containers, so we can clean up properly
 	attachedContainers map[*containercollection.Container]struct{}
 	attacher           Attacher
-	params             *params.Params
-	gadgetInstance     any
-	gadgetCtx          operators.GadgetContext
+	//params             *params.Params
+	gadgetInstance any
+	gadgetCtx      operators.GadgetContext
 
 	eventWrappers map[datasource.DataSource]*compat.EventWrapperBase
+
+	// params extended:
+	// TODO: all these are instance params
+	host          bool
+	containerName string
 }
 
 func (l *localManagerTrace) Name() string {
@@ -398,13 +410,13 @@ func (l *localManagerTrace) Name() string {
 func (l *localManagerTrace) PreGadgetRun() error {
 	log := l.gadgetCtx.Logger()
 	id := uuid.New()
-	host := l.params.Get(Host).AsBool()
+	host := l.host
 
 	// TODO: Improve filtering, see further details in
 	// https://github.com/inspektor-gadget/inspektor-gadget/issues/644.
 	containerSelector := containercollection.ContainerSelector{
 		Runtime: containercollection.RuntimeSelector{
-			ContainerName: l.params.Get(ContainerName).AsString(),
+			ContainerName: l.containerName,
 		},
 	}
 
@@ -509,7 +521,7 @@ func (l *localManagerTrace) PostGadgetRun() error {
 		l.manager.igManager.RemoveMountNsMap(l.subscriptionKey)
 	}
 	if l.subscriptionKey != "" {
-		host := l.params.Get(Host).AsBool()
+		host := l.host
 
 		log.Debugf("calling Unsubscribe()")
 		l.manager.igManager.Unsubscribe(l.subscriptionKey)
@@ -558,6 +570,13 @@ func (l *localManager) InstanceParams() api.Params {
 	return apihelpers.ParamDescsToParams(l.ParamDescs())
 }
 
+func (l *localManager) InstantiateDataOperator2(gadgetCtx operators.GadgetContext, instanceParams any) (
+	operators.DataOperatorInstance, error,
+) {
+
+	return nil, nil
+}
+
 func (l *localManager) InstantiateDataOperator(gadgetCtx operators.GadgetContext, paramValues api.ParamValues) (
 	operators.DataOperatorInstance, error,
 ) {
@@ -567,13 +586,26 @@ func (l *localManager) InstantiateDataOperator(gadgetCtx operators.GadgetContext
 		return nil, err
 	}
 
+	host := params.Get(Host).AsBool()
+	containerName := params.Get(ContainerName).AsString()
+
+	return l.instantiate(gadgetCtx, host, containerName)
+}
+
+func (l *localManager) instantiate(
+	gadgetCtx operators.GadgetContext,
+	host bool, containerName string,
+) (
+	operators.DataOperatorInstance, error,
+) {
 	// Wrapper is used to have ParamDescs() with the new signature
 	traceInstance := &localManagerTraceWrapper{
 		localManagerTrace: localManagerTrace{
 			manager:            l,
 			enrichEvents:       false,
 			attachedContainers: make(map[*containercollection.Container]struct{}),
-			params:             params,
+			host:               host,
+			containerName:      containerName,
 			gadgetCtx:          gadgetCtx,
 			eventWrappers:      make(map[datasource.DataSource]*compat.EventWrapperBase),
 		},
@@ -655,11 +687,11 @@ func (l *localManagerTraceWrapper) PreStart(gadgetCtx operators.GadgetContext) e
 	}
 
 	id := uuid.New()
-	host := l.params.Get(Host).AsBool()
+	host := l.host
 
 	containerSelector := containercollection.ContainerSelector{
 		Runtime: containercollection.RuntimeSelector{
-			ContainerName: l.params.Get(ContainerName).AsString(),
+			ContainerName: l.containerName,
 		},
 	}
 

@@ -134,6 +134,10 @@ type DataOperator interface {
 	Priority() int
 }
 
+type DataOperator2 interface {
+	InstantiateDataOperator2(gadgetCtx GadgetContext, instanceParamValues any) (DataOperatorInstance, error)
+}
+
 type DataOperatorInstance interface {
 	Name() string
 	Start(gadgetCtx GadgetContext) error
