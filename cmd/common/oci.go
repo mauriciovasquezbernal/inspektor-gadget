@@ -221,7 +221,8 @@ func NewRunCommand(rootCmd *cobra.Command, runtime runtime.Runtime, hiddenColumn
 		ociParams.CopyToMap(paramValueMap, "operator.oci.")
 
 		// Fetch gadget information; TODO: this can potentially be cached
-		info, err = runtime.GetGadgetInfo(gadgetCtx, runtimeParams, paramValueMap)
+		// TODO
+		info, err = runtime.GetGadgetInfo(gadgetCtx, runtimeParams, nil /*paramValueMap*/)
 		if err != nil {
 			return fmt.Errorf("fetching gadget information: %w", err)
 		}
@@ -377,7 +378,30 @@ func NewRunCommand(rootCmd *cobra.Command, runtime runtime.Runtime, hiddenColumn
 		// Also copy special oci params
 		ociParams.CopyToMap(paramValueMap, "operator.oci.")
 
-		err := runtime.RunGadget(gadgetCtx, runtimeParams, paramValueMap)
+		// TODO:
+		// - Update this interface
+		// - Understand how to convert from paramValueMap to map[string]any
+
+		paramValues := api.ParamValues(paramValueMap)
+		opParams := map[string]any{}
+
+		for _, op := range ops {
+			opParamPrefix := fmt.Sprintf("operator.%s", op.Name())
+			values := paramValues.ExtractPrefixedValues(opParamPrefix)
+
+			//fmt.Printf("Params for %s are: \n", op.Name())
+			//fmt.Printf("%+v\n", values)
+
+			if op2, ok := op.(operators.DataOperator3); ok {
+				typedParams, err := op2.InstanceParamsFromParams(values)
+				if err != nil {
+					return fmt.Errorf("converting params for operator %s: %w", op.Name(), err)
+				}
+				opParams[op.Name()] = typedParams
+			}
+		}
+
+		err := runtime.RunGadget(gadgetCtx, runtimeParams, opParams)
 		if err != nil {
 			return err
 		}
@@ -447,7 +471,8 @@ func runInstanceSpecsDetached(
 
 		gadgetCtx := gadgetcontext.New(ctx, image, runOptions...)
 
-		err := runtime.RunGadget(gadgetCtx, runtimeParams, spec.ParamValues)
+		// TODO
+		err := runtime.RunGadget(gadgetCtx, runtimeParams, nil /*spec.ParamValues*/)
 		if err != nil {
 			merr = errors.Join(merr, fmt.Errorf("running gadget from manifest file: %w", err))
 		}

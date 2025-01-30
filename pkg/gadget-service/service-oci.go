@@ -92,7 +92,8 @@ func (s *Service) GetGadgetInfo(ctx context.Context, req *api.GetGadgetInfoReque
 		gadgetcontext.WithAsRemoteCall(true),
 	)
 
-	gi, err := s.runtime.GetGadgetInfo(gadgetCtx, s.runtime.ParamDescs().ToParams(), req.ParamValues)
+	// TODO
+	gi, err := s.runtime.GetGadgetInfo(gadgetCtx, s.runtime.ParamDescs().ToParams(), nil /*req.ParamValues*/)
 	if err != nil {
 		return nil, fmt.Errorf("getting gadget info: %w", err)
 	}
@@ -271,7 +272,9 @@ func (s *Service) RunGadget(runGadget api.GadgetManager_RunGadgetServer) error {
 	runtimeParams := s.runtime.ParamDescs().ToParams()
 	runtimeParams.CopyFromMap(ociRequest.ParamValues, "runtime.")
 
-	err = s.runtime.RunGadget(gadgetCtx, runtimeParams, ociRequest.ParamValues)
+	// TODO
+
+	err = s.runtime.RunGadget(gadgetCtx, runtimeParams, nil /*ociRequest.ParamValues*/)
 	if err != nil {
 		return err
 	}

@@ -80,6 +80,19 @@ func (o *cliOperator) InstanceParams() api.Params {
 	return nil
 }
 
+func (c *cliOperator) InstantiateDataOperator2(gadgetCtx operators.GadgetContext, instanceParams any) (
+	operators.DataOperatorInstance, error,
+) {
+	op := &cliOperatorInstance{
+		//paramValues:          paramValues,
+		outputMode:           "columns",
+		supportedOutputModes: make(map[string][]string),
+		defaultOutputMode:    make(map[string]string),
+	}
+
+	return op, nil
+}
+
 func (o *cliOperator) InstantiateDataOperator(gadgetCtx operators.GadgetContext, paramValues api.ParamValues) (operators.DataOperatorInstance, error) {
 	op := &cliOperatorInstance{
 		paramValues:          paramValues,
@@ -100,6 +113,9 @@ type cliOperatorInstance struct {
 	supportedOutputModes map[string][]string
 	// key: datasource name, value: default output mode
 	defaultOutputMode map[string]string
+
+	outputMode string
+	fields     string
 }
 
 func (o *cliOperatorInstance) Name() string {
@@ -275,10 +291,11 @@ func parseFields(fieldsString string, defaultFields []string) []string {
 }
 
 func (o *cliOperatorInstance) PreStart(gadgetCtx operators.GadgetContext) error {
-	params := apihelpers.ToParamDescs(o.ExtraParams(gadgetCtx)).ToParams()
-	params.CopyFromMap(o.paramValues, "")
+	//params := apihelpers.ToParamDescs(o.ExtraParams(gadgetCtx)).ToParams()
+	//params.CopyFromMap(o.paramValues, "")
 
-	fieldValues := strings.Split(params.Get(ParamFields).AsString(), ";")
+	//fieldValues := strings.Split(params.Get(ParamFields).AsString(), ";")
+	fieldValues := strings.Split(o.fields, ";")
 	fieldLookup := make(map[string]string)
 	for _, v := range fieldValues {
 		dsFieldValues := strings.SplitN(v, ":", 2)
@@ -291,7 +308,7 @@ func (o *cliOperatorInstance) PreStart(gadgetCtx operators.GadgetContext) error 
 		fieldLookup[dsName] = dsFields
 	}
 
-	modes, err := apihelpers.GetStringValuesPerDataSource(params.Get(ParamMode).AsString())
+	modes, err := apihelpers.GetStringValuesPerDataSource(o.outputMode)
 	if err != nil {
 		return fmt.Errorf("parsing default output modes: %w", err)
 	}

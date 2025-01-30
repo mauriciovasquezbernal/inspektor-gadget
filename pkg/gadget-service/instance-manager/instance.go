@@ -210,5 +210,7 @@ func (p *GadgetInstance) Run(
 	runtimeParams := runtime.ParamDescs().ToParams()
 	runtimeParams.CopyFromMap(p.request.ParamValues, "runtime.")
 
-	return runtime.RunGadget(gadgetCtx, runtimeParams, p.request.ParamValues)
+	// TODO
+
+	return runtime.RunGadget(gadgetCtx, runtimeParams, nil /*p.request.ParamValues*/)
 }

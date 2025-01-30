@@ -66,6 +66,16 @@ func (s *simpleOperator) InstantiateDataOperator(gadgetCtx operators.GadgetConte
 	return s, nil
 }
 
+func (s *simpleOperator) InstantiateDataOperator2(gadgetCtx operators.GadgetContext, params any) (operators.DataOperatorInstance, error) {
+	if s.onInit != nil {
+		err := s.onInit(gadgetCtx)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
+}
+
 func (s *simpleOperator) Priority() int {
 	return s.priority
 }

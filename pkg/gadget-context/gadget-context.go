@@ -309,7 +309,7 @@ func (c *GadgetContext) SerializeGadgetInfo() (*api.GadgetInfo, error) {
 	return gi, nil
 }
 
-func (c *GadgetContext) LoadGadgetInfo(info *api.GadgetInfo, paramValues api.ParamValues, run bool) error {
+func (c *GadgetContext) LoadGadgetInfo(info *api.GadgetInfo, paramValues map[string]any, run bool) error {
 	c.lock.Lock()
 	if c.loaded {
 		// TODO: verify that info matches what we previously loaded

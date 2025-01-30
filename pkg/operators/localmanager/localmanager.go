@@ -18,12 +18,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"runtime/debug"
 	"slices"
 	"strings"
 
 	"github.com/cilium/ebpf"
-	"github.com/containerd/containerd/pkg/cri/constants"
 	securejoin "github.com/cyphar/filepath-securejoin"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
@@ -31,7 +29,6 @@ import (
 	commonutils "github.com/inspektor-gadget/inspektor-gadget/cmd/common/utils"
 	containercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/container-collection"
 	containerutils "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils"
-	runtimeclient "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils/runtime-client"
 	containerutilsTypes "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils/types"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/datasource"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/datasource/compat"
@@ -40,6 +37,7 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
 	igmanager "github.com/inspektor-gadget/inspektor-gadget/pkg/ig-manager"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
+	localmanagertypes "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/localmanager/types"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/params"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/types"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/utils/host"
@@ -86,89 +84,12 @@ func (l *localManager) Dependencies() []string {
 	return nil
 }
 
-type LocalManagerGlobalParams struct {
-	// Create alias for this type here?
-	Runtimes               []*containerutilsTypes.RuntimeConfig
-	EnrichWithK8sApiserver bool
-	//...
-}
-
-type LocalManagerParams struct {
-	ContainerName string
-	Host          bool
-}
-
-func (l *LocalManagerParams) ToMap() map[string]string {
-	return map[string]string{
-		"operator.LocalManager.containername": l.ContainerName,
-		"operator.LocalManager.host":          fmt.Sprintf("%t", l.Host),
-	}
-}
-
 func (l *localManager) GlobalParamDescs() params.ParamDescs {
-	return params.ParamDescs{
-		{
-			Key:          Runtimes,
-			Alias:        "r",
-			DefaultValue: strings.Join(containerutils.AvailableRuntimes, ","),
-			Description: fmt.Sprintf("Comma-separated list of container runtimes. Supported values are: %s",
-				strings.Join(containerutils.AvailableRuntimes, ", ")),
-			// PossibleValues: containerutils.AvailableRuntimes, // TODO
-		},
-		{
-			Key:          DockerSocketPath,
-			DefaultValue: runtimeclient.DockerDefaultSocketPath,
-			Description:  "Docker Engine API Unix socket path",
-		},
-		{
-			Key:          ContainerdSocketPath,
-			DefaultValue: runtimeclient.ContainerdDefaultSocketPath,
-			Description:  "Containerd CRI Unix socket path",
-		},
-		{
-			Key:          CrioSocketPath,
-			DefaultValue: runtimeclient.CrioDefaultSocketPath,
-			Description:  "CRI-O CRI Unix socket path",
-		},
-		{
-			Key:          PodmanSocketPath,
-			DefaultValue: runtimeclient.PodmanDefaultSocketPath,
-			Description:  "Podman Unix socket path",
-		},
-		{
-			Key:          ContainerdNamespace,
-			DefaultValue: constants.K8sContainerdNamespace,
-			Description:  "Containerd namespace to use",
-		},
-		{
-			Key:          RuntimeProtocol,
-			DefaultValue: "internal",
-			Description:  "Container runtime protocol. Supported values are: internal, cri",
-		},
-		{
-			Key:          EnrichWithK8sApiserver,
-			DefaultValue: "false",
-			Description:  "Connect to the K8s API server to get further K8s enrichment",
-			TypeHint:     params.TypeBool,
-		},
-	}
+	return localmanagertypes.GlobalParamDescs()
 }
 
 func (l *localManager) ParamDescs() params.ParamDescs {
-	return params.ParamDescs{
-		{
-			Key:         ContainerName,
-			Alias:       "c",
-			Description: "Show only data from containers with that name",
-			ValueHint:   gadgets.LocalContainer,
-		},
-		{
-			Key:          Host,
-			Description:  "Show data from both the host and containers",
-			DefaultValue: "false",
-			TypeHint:     params.TypeBool,
-		},
-	}
+	return localmanagertypes.InstanceParamDescs()
 }
 
 func (l *localManager) CanOperateOn(gadget gadgets.GadgetDesc) bool {
@@ -201,7 +122,7 @@ func (l *localManager) CanOperateOn(gadget gadgets.GadgetDesc) bool {
 	return isMountNsMapSetter || canEnrichEvent || isAttacher
 }
 
-func (l *localManager) InitWithParams(params *LocalManagerGlobalParams) error {
+func (l *localManager) InitWithParams(params *localmanagertypes.GlobalParams) error {
 	l.rc = params.Runtimes
 
 	for _, runtime := range l.rc {
@@ -253,7 +174,8 @@ func (l *localManager) InitWithParams(params *LocalManagerGlobalParams) error {
 }
 
 func (l *localManager) Init(operatorParams *params.Params) error {
-	debug.PrintStack()
+
+	// TODO: rewrite using InitWithParams()
 
 	rc := make([]*containerutilsTypes.RuntimeConfig, 0)
 
@@ -362,15 +284,16 @@ func (l *localManager) Instantiate(gadgetContext operators.GadgetContext, gadget
 	_, canEnrichEventFromNetNs := gadgetContext.GadgetDesc().EventPrototype().(operators.ContainerInfoFromNetNSID)
 	canEnrichEvent := canEnrichEventFromMountNs || canEnrichEventFromNetNs
 
-	host := params.Get(Host).AsBool()
-	containerName := params.Get(ContainerName).AsString()
+	typedParams := localmanagertypes.InstanceParams{
+		ContainerName: params.Get(ContainerName).AsString(),
+		Host:          params.Get(Host).AsBool(),
+	}
 
 	traceInstance := &localManagerTrace{
 		manager:            l,
 		enrichEvents:       canEnrichEvent,
 		attachedContainers: make(map[*containercollection.Container]struct{}),
-		host:               host,
-		containerName:      containerName,
+		params:             typedParams,
 		gadgetInstance:     gadgetInstance,
 		gadgetCtx:          gadgetContext,
 	}
@@ -398,9 +321,7 @@ type localManagerTrace struct {
 	eventWrappers map[datasource.DataSource]*compat.EventWrapperBase
 
 	// params extended:
-	// TODO: all these are instance params
-	host          bool
-	containerName string
+	params localmanagertypes.InstanceParams
 }
 
 func (l *localManagerTrace) Name() string {
@@ -410,13 +331,13 @@ func (l *localManagerTrace) Name() string {
 func (l *localManagerTrace) PreGadgetRun() error {
 	log := l.gadgetCtx.Logger()
 	id := uuid.New()
-	host := l.host
+	host := l.params.Host
 
 	// TODO: Improve filtering, see further details in
 	// https://github.com/inspektor-gadget/inspektor-gadget/issues/644.
 	containerSelector := containercollection.ContainerSelector{
 		Runtime: containercollection.RuntimeSelector{
-			ContainerName: l.containerName,
+			ContainerName: l.params.ContainerName,
 		},
 	}
 
@@ -521,7 +442,7 @@ func (l *localManagerTrace) PostGadgetRun() error {
 		l.manager.igManager.RemoveMountNsMap(l.subscriptionKey)
 	}
 	if l.subscriptionKey != "" {
-		host := l.host
+		host := l.params.Host
 
 		log.Debugf("calling Unsubscribe()")
 		l.manager.igManager.Unsubscribe(l.subscriptionKey)
@@ -570,42 +491,55 @@ func (l *localManager) InstanceParams() api.Params {
 	return apihelpers.ParamDescsToParams(l.ParamDescs())
 }
 
+func (l *localManager) InstanceParamsFromParams(paramValues api.ParamValues) (any, error) {
+	return localmanagertypes.InstanceParamsFromParams(paramValues)
+}
+
 func (l *localManager) InstantiateDataOperator2(gadgetCtx operators.GadgetContext, instanceParams any) (
 	operators.DataOperatorInstance, error,
 ) {
+	if instanceParams == nil {
+		instanceParams = &localmanagertypes.InstanceParams{}
+	}
 
-	return nil, nil
+	cfg, ok := instanceParams.(*localmanagertypes.InstanceParams)
+	if !ok {
+		return nil, fmt.Errorf("invalid instance params type")
+	}
+
+	return l.instantiate(gadgetCtx, cfg)
 }
 
 func (l *localManager) InstantiateDataOperator(gadgetCtx operators.GadgetContext, paramValues api.ParamValues) (
 	operators.DataOperatorInstance, error,
 ) {
-	params := l.ParamDescs().ToParams()
-	err := params.CopyFromMap(paramValues, "")
+	params, err := localmanagertypes.InstanceParamsFromParams(paramValues)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("getting instance params: %w", err)
 	}
 
-	host := params.Get(Host).AsBool()
-	containerName := params.Get(ContainerName).AsString()
-
-	return l.instantiate(gadgetCtx, host, containerName)
+	return l.instantiate(gadgetCtx, params.(*localmanagertypes.InstanceParams))
 }
 
 func (l *localManager) instantiate(
 	gadgetCtx operators.GadgetContext,
-	host bool, containerName string,
+	params *localmanagertypes.InstanceParams,
 ) (
 	operators.DataOperatorInstance, error,
 ) {
+
+	if params == nil {
+		// TODO: Should we have a default?
+		params = &localmanagertypes.InstanceParams{}
+	}
+
 	// Wrapper is used to have ParamDescs() with the new signature
 	traceInstance := &localManagerTraceWrapper{
 		localManagerTrace: localManagerTrace{
 			manager:            l,
 			enrichEvents:       false,
 			attachedContainers: make(map[*containercollection.Container]struct{}),
-			host:               host,
-			containerName:      containerName,
+			params:             *params,
 			gadgetCtx:          gadgetCtx,
 			eventWrappers:      make(map[datasource.DataSource]*compat.EventWrapperBase),
 		},
@@ -645,20 +579,7 @@ func (l *localManager) instantiate(
 }
 
 func (l *localManagerTrace) ParamDescs() params.ParamDescs {
-	return params.ParamDescs{
-		{
-			Key:         ContainerName,
-			Alias:       "c",
-			Description: "Show only data from containers with that name",
-			ValueHint:   gadgets.LocalContainer,
-		},
-		{
-			Key:          Host,
-			Description:  "Show data from both the host and containers",
-			DefaultValue: "false",
-			TypeHint:     params.TypeBool,
-		},
-	}
+	return localmanagertypes.InstanceParamDescs()
 }
 
 func (l *localManagerTraceWrapper) ParamDescs(gadgetCtx operators.GadgetContext) params.ParamDescs {
@@ -687,11 +608,11 @@ func (l *localManagerTraceWrapper) PreStart(gadgetCtx operators.GadgetContext) e
 	}
 
 	id := uuid.New()
-	host := l.host
+	host := l.params.Host
 
 	containerSelector := containercollection.ContainerSelector{
 		Runtime: containercollection.RuntimeSelector{
-			ContainerName: l.containerName,
+			ContainerName: l.params.ContainerName,
 		},
 	}
 

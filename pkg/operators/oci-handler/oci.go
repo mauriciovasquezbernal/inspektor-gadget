@@ -170,6 +170,21 @@ func getPullSecret(pullSecretString string, gadgetNamespace string) ([]byte, err
 	return gps.Data[corev1.DockerConfigJsonKey], nil
 }
 
+func (o *ociHandler) InstantiateDataOperator2(gadgetCtx operators.GadgetContext, params any) (
+	operators.DataOperatorInstance, error,
+) {
+	if params == nil {
+		params = &OciHandlerParams{}
+	}
+
+	cfg, ok := params.(*OciHandlerParams)
+	if !ok {
+		return nil, fmt.Errorf("invalid instance params type")
+	}
+
+	return o.instantiate(gadgetCtx, cfg)
+}
+
 func (o *ociHandler) InstantiateDataOperator(gadgetCtx operators.GadgetContext, instanceParamValues api.ParamValues) (
 	operators.DataOperatorInstance, error,
 ) {
@@ -184,14 +199,33 @@ func (o *ociHandler) InstantiateDataOperator(gadgetCtx operators.GadgetContext, 
 		return nil, err
 	}
 
-	instance := &OciHandlerInstance{
-		ociHandler:  o,
-		gadgetCtx:   gadgetCtx,
-		ociParams:   ociParams,
-		paramValues: instanceParamValues,
+	params := &OciHandlerParams{
+		Annotate:           ociParams.Get(annotate).AsStringSlice(),
+		Pull:               ociParams.Get(pullParam).AsString(),
+		PullSecret:         ociParams.Get(pullSecret).AsString(),
+		Authfile:           ociParams.Get(authfileParam).AsString(),
+		InsecureRegistries: ociParams.Get(insecureRegistriesParam).AsStringSlice(),
+		DisallowPulling:    ociParams.Get(disallowPulling).AsBool(),
+		VerifyImage:        ociParams.Get(verifyImage).AsBool(),
+		PublicKeys:         ociParams.Get(publicKeys).AsStringSlice(),
+		AllowedGadgets:     ociParams.Get(allowedGadgets).AsStringSlice(),
 	}
 
-	err = instance.init(gadgetCtx)
+	return o.instantiate(gadgetCtx, params)
+}
+
+func (o *ociHandler) instantiate(gadgetCtx operators.GadgetContext, params *OciHandlerParams) (
+	operators.DataOperatorInstance, error,
+) {
+	instance := &OciHandlerInstance{
+		ociHandler: o,
+		gadgetCtx:  gadgetCtx,
+		//ociParams:   ociParams,
+		params: params,
+		//paramValues: instanceParamValues,
+	}
+
+	err := instance.init(gadgetCtx)
 	if err != nil {
 		return nil, err
 	}
@@ -215,32 +249,29 @@ func (o *OciHandlerInstance) init(gadgetCtx operators.GadgetContext) error {
 	var secretBytes []byte
 
 	// TODO: move to a place without dependency on k8s
-	if pullSecretParam := o.ociParams.Get(pullSecret); pullSecretParam != nil {
-		pullSecretString := o.ociParams.Get(pullSecret).AsString()
-
-		if pullSecretString != "" {
-			var err error
-			// TODO: Namespace is still hardcoded
-			secretBytes, err = getPullSecret(pullSecretString, "gadget")
-			if err != nil {
-				return err
-			}
+	pullSecretString := o.params.PullSecret
+	if pullSecretString != "" {
+		var err error
+		// TODO: Namespace is still hardcoded
+		secretBytes, err = getPullSecret(pullSecretString, "gadget")
+		if err != nil {
+			return err
 		}
 	}
 
 	imgOpts := &oci.ImageOptions{
 		AuthOptions: oci.AuthOptions{
-			AuthFile:           o.ociParams.Get(authfileParam).AsString(),
+			AuthFile:           o.params.Authfile,
 			SecretBytes:        secretBytes,
-			InsecureRegistries: o.ociParams.Get(insecureRegistriesParam).AsStringSlice(),
-			DisallowPulling:    o.ociParams.Get(disallowPulling).AsBool(),
+			InsecureRegistries: o.params.InsecureRegistries,
+			DisallowPulling:    o.params.DisallowPulling,
 		},
 		VerifyOptions: oci.VerifyOptions{
-			VerifyPublicKey: o.ociParams.Get(verifyImage).AsBool(),
-			PublicKeys:      o.ociParams.Get(publicKeys).AsStringSlice(),
+			VerifyPublicKey: o.params.VerifyImage,
+			PublicKeys:      o.params.PublicKeys,
 		},
 		AllowedGadgetsOptions: oci.AllowedGadgetsOptions{
-			AllowedGadgets: o.ociParams.Get(allowedGadgets).AsStringSlice(),
+			AllowedGadgets: o.params.AllowedGadgets,
 		},
 		Logger: gadgetCtx.Logger(),
 	}
@@ -253,8 +284,7 @@ func (o *OciHandlerInstance) init(gadgetCtx operators.GadgetContext) error {
 	if target == nil {
 		// Make sure the image is available, either through pulling or by just accessing a local copy
 		// TODO: add security constraints (e.g. don't allow pulling - add GlobalParams for that)
-		err := oci.EnsureImage(gadgetCtx.Context(), gadgetCtx.ImageName(),
-			imgOpts, o.ociParams.Get(pullParam).AsString())
+		err := oci.EnsureImage(gadgetCtx.Context(), gadgetCtx.ImageName(), imgOpts, o.params.Pull)
 		if err != nil {
 			return fmt.Errorf("ensuring image: %w", err)
 		}
@@ -288,7 +318,7 @@ func (o *OciHandlerInstance) init(gadgetCtx operators.GadgetContext) error {
 		return fmt.Errorf("unmarshalling metadata: %w", err)
 	}
 
-	for _, ann := range o.ociParams.Get(annotate).AsStringSlice() {
+	for _, ann := range o.params.Annotate {
 		if len(ann) == 0 {
 			continue
 		}
@@ -436,13 +466,27 @@ func (o *OciHandlerInstance) Stop(gadgetCtx operators.GadgetContext) error {
 	return nil
 }
 
+type OciHandlerParams struct {
+	Annotate           []string
+	Pull               string
+	PullSecret         string
+	Authfile           string
+	InsecureRegistries []string
+	VerifyImage        bool
+	PublicKeys         []string
+	AllowedGadgets     []string
+	DisallowPulling    bool
+}
+
 type OciHandlerInstance struct {
 	ociHandler             *ociHandler
 	gadgetCtx              operators.GadgetContext
 	imageOperatorInstances []operators.ImageOperatorInstance
 	extraParams            api.Params
 	paramValues            api.ParamValues
-	ociParams              *params.Params
+	//ociParams              *params.Params
+
+	params *OciHandlerParams
 }
 
 func (o *OciHandlerInstance) Name() string {

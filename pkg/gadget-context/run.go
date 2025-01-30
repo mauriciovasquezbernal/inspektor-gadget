@@ -19,11 +19,10 @@ import (
 	"sort"
 
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-service/api"
-	apihelpers "github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-service/api-helpers"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 )
 
-func (c *GadgetContext) initAndPrepareOperators(paramValues api.ParamValues) ([]operators.DataOperatorInstance, error) {
+func (c *GadgetContext) initAndPrepareOperators(paramValues map[string]any) ([]operators.DataOperatorInstance, error) {
 	log := c.Logger()
 
 	ops := c.DataOperators()
@@ -48,7 +47,8 @@ func (c *GadgetContext) initAndPrepareOperators(paramValues api.ParamValues) ([]
 
 		//globalParams := op.GlobalParams().AddPrefix(opParamPrefix)
 		instanceParams := op.InstanceParams().AddPrefix(opParamPrefix)
-		opParamValues := paramValues.ExtractPrefixedValues(opParamPrefix)
+		opParams := paramValues[op.Name()]
+		//opParamValues := paramValues.ExtractPrefixedValues(opParamPrefix)
 
 		// TODO[mauricio]: This doesn't make sense. The operators are already initialized at this point
 		//err := apihelpers.Validate(globalParams, opParamValues)
@@ -56,24 +56,25 @@ func (c *GadgetContext) initAndPrepareOperators(paramValues api.ParamValues) ([]
 		//	return nil, fmt.Errorf("validating global params for operator %q: %w", op.Name(), err)
 		//}
 
-		err := apihelpers.Validate(instanceParams, opParamValues)
-		if err != nil {
-			return nil, fmt.Errorf("validating instance params for operator %q: %w", op.Name(), err)
-		}
+		//err := apihelpers.Validate(instanceParams, opParamValues)
+		//if err != nil {
+		//	return nil, fmt.Errorf("validating instance params for operator %q: %w", op.Name(), err)
+		//}
 
 		var opInst operators.DataOperatorInstance
 
 		if d2, ok := op.(operators.DataOperator2); ok {
 			// TODO: how to get parameters?
-			opInst, err = d2.InstantiateDataOperator2(c, opParamValues)
+			var err error
+			opInst, err = d2.InstantiateDataOperator2(c, opParams)
 			if err != nil {
 				return nil, fmt.Errorf("instantiating operator %q: %w", op.Name(), err)
 			}
 		} else {
-			opInst, err = op.InstantiateDataOperator(c, opParamValues)
-			if err != nil {
-				return nil, fmt.Errorf("instantiating operator %q: %w", op.Name(), err)
-			}
+			//opInst, err := op.InstantiateDataOperator(c, opParamValues)
+			//if err != nil {
+			//	return nil, fmt.Errorf("instantiating operator %q: %w", op.Name(), err)
+			//}
 		}
 		if opInst == nil {
 			log.Debugf("> skipped %s", op.Name())
@@ -152,12 +153,12 @@ func (c *GadgetContext) stop(dataOperatorInstances []operators.DataOperatorInsta
 	}
 }
 
-func (c *GadgetContext) PrepareGadgetInfo(paramValues api.ParamValues) error {
+func (c *GadgetContext) PrepareGadgetInfo(paramValues map[string]any) error {
 	_, err := c.initAndPrepareOperators(paramValues)
 	return err
 }
 
-func (c *GadgetContext) Run(paramValues api.ParamValues) error {
+func (c *GadgetContext) Run(paramValues map[string]any) error {
 	defer c.cancel()
 
 	dataOperatorInstances, err := c.initAndPrepareOperators(paramValues)

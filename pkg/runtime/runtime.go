@@ -56,7 +56,7 @@ type GadgetContext interface {
 	SetVar(string, any)
 	GetVar(string) (any, bool)
 	SerializeGadgetInfo() (*api.GadgetInfo, error)
-	LoadGadgetInfo(info *api.GadgetInfo, paramValues api.ParamValues, run bool) error
+	LoadGadgetInfo(info *api.GadgetInfo, paramValues map[string]any, run bool) error
 	Params() []*api.Param
 	SetMetadata([]byte)
 	SetParams([]*api.Param)
@@ -64,8 +64,8 @@ type GadgetContext interface {
 	OrasTarget() oras.ReadOnlyTarget
 	IsRemoteCall() bool
 
-	Run(paramValues api.ParamValues) error
-	PrepareGadgetInfo(paramValues api.ParamValues) error
+	Run(paramValues map[string]any) error
+	PrepareGadgetInfo(paramValues map[string]any) error
 }
 
 // GadgetResult contains the (optional) payload and error of a gadget run for a node
@@ -118,10 +118,10 @@ type Runtime interface {
 
 	// GetGadgetInfo returns information about the gadget and used operators; this info potentially comes
 	// from a cache
-	GetGadgetInfo(gadgetCtx GadgetContext, runtimeParams *params.Params, paramValueMap api.ParamValues) (*api.GadgetInfo, error)
+	GetGadgetInfo(gadgetCtx GadgetContext, runtimeParams *params.Params, paramValues map[string]any) (*api.GadgetInfo, error)
 
 	RunBuiltInGadget(gadgetCtx GadgetContext) (CombinedGadgetResult, error)
-	RunGadget(gadgetCtx GadgetContext, runtimeParams *params.Params, paramValueMap api.ParamValues) error
+	RunGadget(gadgetCtx GadgetContext, runtimeParams *params.Params, paramValues map[string]any) error
 	GetCatalog() (*Catalog, error)
 	SetDefaultValue(params.ValueHint, string)
 	GetDefaultValue(params.ValueHint) (string, bool)

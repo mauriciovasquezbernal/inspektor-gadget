@@ -136,6 +136,11 @@ type DataOperator interface {
 
 type DataOperator2 interface {
 	InstantiateDataOperator2(gadgetCtx GadgetContext, instanceParamValues any) (DataOperatorInstance, error)
+	//InstanceParamsFromParams(paramValues api.ParamValues) (any, error)
+}
+
+type DataOperator3 interface {
+	InstanceParamsFromParams(paramValues api.ParamValues) (any, error)
 }
 
 type DataOperatorInstance interface {

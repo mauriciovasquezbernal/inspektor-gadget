@@ -41,13 +41,13 @@ import (
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets/traceloop/tracer"
 
 	// Another blank import for the used operator
-	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/filter"
-	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/formatters"
+	//_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/filter"
+	//_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/formatters"
 	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/localmanager"
-	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/prometheus"
-	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/socketenricher"
-	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/sort"
-	_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/uidgidresolver"
+	//_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/prometheus"
+	//_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/socketenricher"
+	//_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/sort"
+	//_ "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/uidgidresolver"
 )
 
 func main() {

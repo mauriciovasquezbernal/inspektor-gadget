@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"os"
 
+	log "github.com/sirupsen/logrus"
+
 	containerutilsTypes "github.com/inspektor-gadget/inspektor-gadget/pkg/container-utils/types"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/datasource"
 	igjson "github.com/inspektor-gadget/inspektor-gadget/pkg/datasource/formatters/json"
@@ -26,6 +28,7 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators/formatters"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators/localmanager"
+	localmanagertypes "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/localmanager/types"
 	ocihandler "github.com/inspektor-gadget/inspektor-gadget/pkg/operators/oci-handler"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/operators/simple"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/runtime/local"
@@ -33,6 +36,8 @@ import (
 )
 
 func do() error {
+	log.SetLevel(log.DebugLevel)
+
 	ctx := context.Background()
 
 	const opPriority = 50000
@@ -50,7 +55,7 @@ func do() error {
 
 	// Configure the local manager operator
 	localManagerOp := localmanager.LocalManagerOperator
-	localManagerParams := &localmanager.LocalManagerGlobalParams{
+	localManagerParams := &localmanagertypes.GlobalParams{
 		// Set the default runtime to docker
 		Runtimes: []*containerutilsTypes.RuntimeConfig{
 			{
@@ -83,12 +88,13 @@ func do() error {
 	}
 	defer runtime.Close()
 
-	localManagerInstanceParams := &localmanager.LocalManagerParams{
+	params := map[string]any{}
+
+	params[localManagerOp.Name()] = &localmanagertypes.InstanceParams{
 		ContainerName: "mycontainer",
-		Host:          true,
+		//Host:          true,
 	}
 
-	params := localManagerInstanceParams.ToMap()
 	if err := runtime.RunGadget(gadgetCtx, nil, params); err != nil {
 		return fmt.Errorf("running gadget: %w", err)
 	}

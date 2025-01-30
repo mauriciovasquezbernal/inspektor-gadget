@@ -31,7 +31,8 @@ import (
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/runtime"
 )
 
-func (r *Runtime) GetGadgetInfo(gadgetCtx runtime.GadgetContext, runtimeParams *params.Params, paramValues api.ParamValues) (*api.GadgetInfo, error) {
+// func (r *Runtime) GetGadgetInfo(gadgetCtx runtime.GadgetContext, runtimeParams *params.Params, paramValues api.ParamValues) (*api.GadgetInfo, error) {
+func (r *Runtime) GetGadgetInfo(gadgetCtx runtime.GadgetContext, runtimeParams *params.Params, paramValues map[string]any) (*api.GadgetInfo, error) {
 	if runtimeParams == nil {
 		runtimeParams = r.ParamDescs().ToParams()
 	}
@@ -43,10 +44,16 @@ func (r *Runtime) GetGadgetInfo(gadgetCtx runtime.GadgetContext, runtimeParams *
 	defer conn.Close()
 	client := api.NewGadgetManagerClient(conn)
 
+	// How to marshall params?
+	// loop through all params
+	// then call op.ToMap(foo)
+	// how to get the operator to do this? New operators params logic?
+
 	in := &api.GetGadgetInfoRequest{
-		ParamValues: paramValues,
-		ImageName:   gadgetCtx.ImageName(),
-		Version:     api.VersionGadgetInfo,
+		// TODO: param values need to be converted here
+		//ParamValues: paramValues,
+		ImageName: gadgetCtx.ImageName(),
+		Version:   api.VersionGadgetInfo,
 	}
 
 	// specify that ImageName will contain a gadget instance ID
@@ -59,6 +66,7 @@ func (r *Runtime) GetGadgetInfo(gadgetCtx runtime.GadgetContext, runtimeParams *
 		return nil, fmt.Errorf("getting gadget info: %w", err)
 	}
 
+	// TODO
 	err = gadgetCtx.LoadGadgetInfo(out.GadgetInfo, paramValues, false)
 	if err != nil {
 		return nil, fmt.Errorf("initializing local operators: %w", err)
@@ -67,7 +75,7 @@ func (r *Runtime) GetGadgetInfo(gadgetCtx runtime.GadgetContext, runtimeParams *
 	return gadgetCtx.SerializeGadgetInfo()
 }
 
-func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext, runtimeParams *params.Params, paramValues api.ParamValues) error {
+func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext, runtimeParams *params.Params, paramValues map[string]any) error {
 	if runtimeParams == nil {
 		runtimeParams = r.ParamDescs().ToParams()
 	}
@@ -78,7 +86,7 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext, runtimeParams *para
 	}
 
 	if p := runtimeParams.Get(ParamDetach); p != nil && p.AsBool() {
-		return r.createGadgetInstance(gadgetCtx, runtimeParams, paramValues)
+		return r.createGadgetInstance(gadgetCtx, runtimeParams, nil /*paramValues*/)
 	}
 
 	targets, err := r.getTargets(gadgetCtx.Context(), runtimeParams)
@@ -88,7 +96,7 @@ func (r *Runtime) RunGadget(gadgetCtx runtime.GadgetContext, runtimeParams *para
 
 	gadgetCtx.SetVar(runtime.NumRunTargets, len(targets))
 
-	_, err = r.runGadgetOnTargets(gadgetCtx, paramValues, targets)
+	_, err = r.runGadgetOnTargets(gadgetCtx, nil /*paramValues*/, targets)
 	return err
 }
 
@@ -241,7 +249,7 @@ func (r *Runtime) runGadget(gadgetCtx runtime.GadgetContext, target target, allP
 
 				// Try to load gadget info; if gadget info has already been loaded and this one
 				// doesn't match, this will terminate this particular client session
-				err = gadgetCtx.LoadGadgetInfo(gi, allParams, true)
+				err = gadgetCtx.LoadGadgetInfo(gi, nil /*allParams*/, true)
 				if err != nil {
 					gadgetCtx.Logger().Warnf("deserizalize gadget info: %v", err)
 					continue
