@@ -6,6 +6,9 @@ main_menu: true
 sidebar_position: 1
 ---
 
+TODO: REMOVE BEFORE MERGE!!
+
+
 Inspektor Gadget is a set of tools and framework for data collection and system
 inspection on Kubernetes clusters and Linux hosts using
 [eBPF](https://ebpf.io/). It manages the packaging, deployment and execution of
