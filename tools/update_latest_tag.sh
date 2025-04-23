@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-OWNER="inspektor-gadget"
+OWNER="mauriciovasquezbernal"
 OLD_TAG="$1"
 NEW_TAG="latest"
 
