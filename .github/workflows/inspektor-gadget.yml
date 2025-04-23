@@ -1158,6 +1158,9 @@ jobs:
     - name: Unit tests
       run: |
         sudo make test
+    - name: Setup tmate session
+      if: always()
+      uses: mxschmitt/action-tmate@v3
     - name: Controller unit tests
       run: |
         make controller-tests
