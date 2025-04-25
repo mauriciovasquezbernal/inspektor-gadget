@@ -1,7 +1,7 @@
 TAG := `git describe --tags --always`
 VERSION :=
 
-CONTAINER_REPO_NAMESPACE ?= ghcr.io/inspektor-gadget
+CONTAINER_REPO_NAMESPACE ?= ghcr.io/mauriciovasquezbernal
 CONTAINER_REPO ?= $(CONTAINER_REPO_NAMESPACE):inspektor-gadget
 IMAGE_TAG ?= $(shell ./tools/image-tag branch)
 
