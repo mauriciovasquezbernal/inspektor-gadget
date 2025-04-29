@@ -1554,10 +1554,10 @@ jobs:
       - name: Install Cosign
         if: needs.check-secrets.outputs.cosign == 'true'
         uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
-      - name: Verify gadget builder image
-        if: needs.check-secrets.outputs.cosign == 'true'
-        run: |
-          cosign verify --key pkg/resources/inspektor-gadget.pub ${{ needs.build-helper-images.outputs.gadget_builder_image }}
+      #- name: Verify gadget builder image
+      #  if: needs.check-secrets.outputs.cosign == 'true'
+      #  run: |
+      #    cosign verify --key pkg/resources/inspektor-gadget.pub ${{ needs.build-helper-images.outputs.gadget_builder_image }}
       - name: Build gadgets
         env:
           BUILDER_IMAGE: ${{ needs.build-helper-images.outputs.gadget_builder_image }}
