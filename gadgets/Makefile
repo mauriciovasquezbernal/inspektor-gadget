@@ -64,18 +64,26 @@ GADGETS_README_DEV = $(filter-out ci/%, $(addsuffix /dev.md, $(GADGETS)))
 .PHONY: all
 all: build
 
+.PHONY: build
 build: $(GADGETS)
+
+# Pull the gadget builder in an independent step to avoid doing the same for
+# each gadget, which introduces some overhead and increases the build time.
+.PHONY: pull-builder-image
+pull-builder-image:
+	docker pull $(BUILDER_IMAGE)
 
 # GADGET_BUILD_PARAMS can be used to pass additional parameters e.g
 # GADGET_BUILD_PARAMS="--update-metadata" make build
 .PHONY: $(GADGETS)
-$(GADGETS):
+$(GADGETS): pull-builder-image
 	@echo "Building $@"
 	@sudo -E \
 		IG_SOURCE_PATH=$(realpath $(ROOT_DIR)/..) \
 		$(IG) image build \
 		--builder-image $(BUILDER_IMAGE) \
 		-t $(GADGET_REPOSITORY)/$@:$(GADGET_TAG) \
+		--builder-image-pull=never \
 		$$GADGET_BUILD_PARAMS \
 		$@
 
