@@ -436,6 +436,7 @@ func runBuild(cmd *cobra.Command, opts *cmdOpts) error {
 				if ok, path := caches.ebpf[arch].Get(); ok {
 					obj.EBPF = path
 					ebpfSource = ""
+					fmt.Printf("Using cached ebpf object %s\n", path)
 				} else {
 					needsToBuild = true
 				}
