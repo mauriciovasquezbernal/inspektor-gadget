@@ -33,19 +33,17 @@ import (
 )
 
 const (
-	OperatorName             = "SocketEnricher"
-	SocketEnricherPathsParam = "socket-enricher-paths"
+	OperatorName = "SocketEnricher"
 )
 
 type SocketEnricherInterface interface {
-	SetSocketEnricherMap(*ebpf.Map, *ebpf.Map)
+	SetSocketEnricherMap(*ebpf.Map)
 }
 
 type SocketEnricher struct {
 	mu             sync.Mutex
 	socketEnricher *tracer.SocketEnricher
 	refCount       int
-	paths          bool
 }
 
 func (s *SocketEnricher) Name() string {
@@ -62,7 +60,6 @@ func (s *SocketEnricher) GlobalParamDescs() params.ParamDescs {
 
 func (s *SocketEnricher) ParamDescs() params.ParamDescs {
 	return nil
-
 }
 
 func (s *SocketEnricher) Dependencies() []string {
@@ -86,10 +83,6 @@ func (s *SocketEnricher) CanOperateOn(gadget gadgets.GadgetDesc) bool {
 }
 
 func (s *SocketEnricher) Init(params *params.Params) error {
-	if params != nil {
-		s.paths = params.Get(SocketEnricherPathsParam).AsBool()
-	}
-
 	return nil
 }
 
@@ -132,18 +125,16 @@ func (i *SocketEnricherInstance) PreGadgetRun() error {
 	defer i.manager.mu.Unlock()
 
 	if i.manager.refCount == 0 {
-		t, err := tracer.NewSocketEnricher(i.manager.paths)
+		t, err := tracer.NewSocketEnricher()
 		if err != nil {
 			return err
 		}
 		i.manager.socketEnricher = t
-
 	}
 
 	i.manager.refCount++
 
-	m1, m2 := i.manager.socketEnricher.SocketsMap()
-	setter.SetSocketEnricherMap(m1, m2)
+	setter.SetSocketEnricherMap(i.manager.socketEnricher.SocketsMap())
 
 	return nil
 }
@@ -166,14 +157,7 @@ func (i *SocketEnricherInstance) EnrichEvent(ev any) error {
 }
 
 func (s *SocketEnricher) GlobalParams() api.Params {
-	return api.Params{
-		{
-			Key:          SocketEnricherPathsParam,
-			Description:  "Enable socket enricher paths. If enabled, the socket enricher will also provide paths for sockets.",
-			DefaultValue: "false",
-			TypeHint:     api.TypeBool,
-		},
-	}
+	return nil
 }
 
 func (s *SocketEnricher) InstanceParams() api.Params {
@@ -209,10 +193,9 @@ func (i *SocketEnricherInstance) Stop(gadgetCtx operators.GadgetContext) error {
 	return i.PostGadgetRun()
 }
 
-func (i *SocketEnricherInstance) SetSocketEnricherMap(m *ebpf.Map, m2 *ebpf.Map) {
+func (i *SocketEnricherInstance) SetSocketEnricherMap(m *ebpf.Map) {
 	i.gadgetCtx.Logger().Debugf("setting sockets map")
 	i.gadgetCtx.SetVar(tracer.SocketsMapName, m)
-	i.gadgetCtx.SetVar(tracer.SocketsExtendedMapName, m2)
 }
 
 func init() {

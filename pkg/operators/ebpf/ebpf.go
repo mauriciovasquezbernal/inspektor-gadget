@@ -254,9 +254,6 @@ func (i *ebpfInstance) analyze() error {
 				if s == socketenricher.SocketsMapName {
 					return socketenricher.SocketsMapName, true
 				}
-				if s == socketenricher.SocketsExtendedMapName {
-					return socketenricher.SocketsExtendedMapName, true
-				}
 				return "", false
 			},
 			populateFunc: i.populateMap,

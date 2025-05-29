@@ -34,8 +34,7 @@ import (
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target $TARGET -cc clang -cflags ${CFLAGS} socketsiter ./bpf/sockets-iter.bpf.c -- -I./bpf/
 
 const (
-	SocketsMapName         = "gadget_sockets"
-	SocketsExtendedMapName = "gadget_sockets_extended"
+	SocketsMapName = "gadget_sockets"
 )
 
 // SocketEnricher creates a map exposing processes owning each socket.
@@ -50,18 +49,14 @@ type SocketEnricher struct {
 
 	closeOnce sync.Once
 	done      chan bool
-
-	paths bool
 }
 
-func (se *SocketEnricher) SocketsMap() (*ebpf.Map, *ebpf.Map) {
-	return se.objs.GadgetSockets, se.objs.GadgetSocketsExtended
+func (se *SocketEnricher) SocketsMap() *ebpf.Map {
+	return se.objs.GadgetSockets
 }
 
-func NewSocketEnricher(paths bool) (*SocketEnricher, error) {
-	se := &SocketEnricher{
-		paths: paths,
-	}
+func NewSocketEnricher() (*SocketEnricher, error) {
+	se := &SocketEnricher{}
 
 	if err := se.start(); err != nil {
 		se.Close()
@@ -101,12 +96,11 @@ func (se *SocketEnricher) start() error {
 		return fmt.Errorf("loading socket enricher asset: %w", err)
 	}
 
-	socketSpec := &socketenricherSpecs{}
-	if err := spec.Assign(socketSpec); err != nil {
-		return err
-	}
-
 	if disableBPFIterators {
+		socketSpec := &socketenricherSpecs{}
+		if err := spec.Assign(socketSpec); err != nil {
+			return err
+		}
 		if err := socketSpec.DisableBpfIterators.Set(true); err != nil {
 			return err
 		}
@@ -114,11 +108,6 @@ func (se *SocketEnricher) start() error {
 		opts.MapReplacements = map[string]*ebpf.Map{
 			SocketsMapName: se.objsIter.GadgetSockets,
 		}
-	}
-
-	// TODO: set max entries of extended map to 1 to avoid wasting memory.
-	if err := socketSpec.Paths.Set(se.paths); err != nil {
-		return fmt.Errorf("setting paths variable: %w", err)
 	}
 
 	if err := spec.LoadAndAssign(&se.objs, &opts); err != nil {

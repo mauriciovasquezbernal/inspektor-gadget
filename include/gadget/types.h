@@ -127,6 +127,8 @@ struct gadget_process {
 	struct gadget_parent parent;
 };
 
+#define SE_PATH_MAX 512
+
 struct sockets_value {
 	__u64 mntns;
 	__u64 pid_tgid;
@@ -135,15 +137,10 @@ struct sockets_value {
 	char ptask[TASK_COMM_LEN];
 	__u64 sock;
 	__u64 deletion_timestamp;
-	__u32 ppid;
-	char ipv6only;
-};
-
-#define SE_PATH_MAX 512
-
-struct sockets_value_extended {
 	char cwd[SE_PATH_MAX];
 	char exepath[SE_PATH_MAX];
+	__u32 ppid;
+	char ipv6only;
 };
 
 #endif /* __TYPES_H */
