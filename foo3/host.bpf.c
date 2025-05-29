@@ -5,24 +5,30 @@
 
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
+#include <bpf/bpf_core_read.h>
 
 #include "header_host.h"
 
 SEC("tracepoint/syscalls/sys_enter_execveat")
 int ig_execveat_e(struct syscall_trace_enter *ctx)
 {
-	//const char *pathname = (const char *)ctx->args[1];
-	//const char **args = (const char **)(ctx->args[2]);
-	//return enter_execve(pathname, args);
-
 	struct key k = {
 		.key = 0,
 	};
 
-	struct value v = {	};
-	//bpf_get_current_comm(v.task, sizeof(v.task));
-	v.field1 = 7878;
-	v.field2 = 1234;
+	struct value v = {};
+	if (bpf_core_field_exists((&v)->field1)) {
+		v.field1 = 111111;
+	}
+	if (bpf_core_field_exists((&v)->field2)) {
+		v.field2 = 222222;
+	}
+	if (bpf_core_field_exists((&v)->field3)) {
+		v.field3 = 333333;
+	}
+	if (bpf_core_field_exists((&v)->field4)) {
+		bpf_get_current_comm(v.field4, sizeof(v.field4));
+	}
 
 	bpf_map_update_elem(&gadget_map, &k, &v, BPF_ANY);
 

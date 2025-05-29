@@ -5,9 +5,9 @@
 
 // TODO: adding this causes an  issue on the host side, probably because it can't find the offsets to use
 
-//#ifndef BPF_NO_PRESERVE_ACCESS_INDEX
-//#pragma clang attribute push (__attribute__((preserve_access_index)), apply_to = record)
-//#endif
+#ifndef BPF_NO_PRESERVE_ACCESS_INDEX
+#pragma clang attribute push (__attribute__((preserve_access_index)), apply_to = record)
+#endif
 
 struct key {
 	__u32 key;
@@ -17,12 +17,15 @@ struct key {
 
 struct value {
 	//__u64 bar1;
-	//char task[TASK_COMM_LEN];
+
 	//__u64 bar2;
 
 	//__u64 bar3;
 	__u64 field1;
 	__u64 field2;
+	__u64 field3;
+	char field4[TASK_COMM_LEN];
+
 	//__u64 bar2;
 	//__u64 morejunk[8];
 };
@@ -35,8 +38,8 @@ struct {
 	__type(value, struct value);
 } gadget_map SEC(".maps");
 
-//#ifndef BPF_NO_PRESERVE_ACCESS_INDEX
-//#pragma clang attribute pop
-//#endif
+#ifndef BPF_NO_PRESERVE_ACCESS_INDEX
+#pragma clang attribute pop
+#endif
 
 #endif

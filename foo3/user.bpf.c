@@ -5,6 +5,7 @@
 
 #include <linux/bpf.h>
 #include <bpf/bpf_helpers.h>
+#include <bpf/bpf_core_read.h>
 
 #include "header_user.h"
 
@@ -20,8 +21,21 @@ int ig_user(struct syscall_trace_enter *ctx)
 		return 0; // If no entry found, exit early
 	}
 
-	bpf_printk("ig_user: field1: %llu", v->field1);
-	bpf_printk("ig_user: field2: %llu", v->field2);
+	if (bpf_core_field_exists(v->field1)) {
+		bpf_printk("ig_user: field1: %llu", v->field1);
+	}
+
+	if (bpf_core_field_exists(v->field2)) {
+		bpf_printk("ig_user: field2: %llu", v->field2);
+	}
+
+	if (bpf_core_field_exists(v->field3)) {
+		bpf_printk("ig_user: field3: %llu", v->field3);
+	}
+
+	if (bpf_core_field_exists(v->field4)) {
+		bpf_printk("ig_user: field4: %s", v->field4);
+	}
 
 	return 0;
 }

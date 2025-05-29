@@ -15,9 +15,10 @@ struct key {
 
 struct value {
 	char chunk[250];
-	//char task[TASK_COMM_LEN];
+	char field4[TASK_COMM_LEN];
 	__u64 field2;
 	__u64 field1;
+	__u64 field3;
 
 };
 

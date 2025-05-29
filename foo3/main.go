@@ -53,73 +53,164 @@ func mergeBtfs(hostBtf, kernelBtf *btf.Spec) (*btf.Spec, error) {
 	return mergedBtf, nil
 }
 
-func buildHostBtf() (*btf.Spec, error) {
-	types := []btf.Type{}
-
-	int64T := &btf.Int{
-		Name:     "__u64",
-		Size:     8,
-		Encoding: btf.Unsigned,
+func BtfInt(size uint32, encoding btf.IntEncoding) *btf.Int {
+	return &btf.Int{
+		Size:     size,
+		Encoding: encoding,
 	}
-	types = append(types, int64T)
+}
+
+func CString(nelems uint32) *btf.Array {
+	// TODO: do I need to register these types?
+	charT := BtfInt(8, btf.Char)
+	indexT := BtfInt(32, btf.Unsigned)
+
+	return &btf.Array{
+		Index:  indexT,
+		Type:   charT,
+		Nelems: nelems,
+	}
+}
+
+func buildHostBtf() (*btf.Spec, uint32, error) {
+	//memberNames := strings.Split(fields, ",")
+	field1 := true
+	field2 := true
+	field3 := true
+	field4 := false
+
+	uint8T := BtfInt(8, btf.Unsigned)
+	uint16T := BtfInt(16, btf.Unsigned)
+	uint32T := BtfInt(32, btf.Unsigned)
+	uint64T := BtfInt(64, btf.Unsigned)
+	int8T := BtfInt(8, btf.Signed)
+	int16T := BtfInt(16, btf.Signed)
+	int32T := BtfInt(32, btf.Signed)
+	int64T := BtfInt(64, btf.Signed)
+
+	types := []btf.Type{
+		uint8T,
+		uint16T,
+		uint32T,
+		uint64T,
+		int8T,
+		int16T,
+		int32T,
+		int64T,
+	}
+
+	currentOffset := uint32(0)
+	totalSize := uint32(0)
+
+	members := []btf.Member{}
+	if field1 {
+		members = append(members, btf.Member{
+			Name:   "field1",
+			Type:   uint64T,
+			Offset: btf.Bits(currentOffset * 8),
+		})
+		currentOffset += 8
+		totalSize += 8
+	}
+	if field2 {
+		members = append(members, btf.Member{
+			Name:   "field2",
+			Type:   uint64T,
+			Offset: btf.Bits(currentOffset * 8),
+		})
+		currentOffset += 8
+		totalSize += 8
+	}
+	if field3 {
+		members = append(members, btf.Member{
+			Name:   "field3",
+			Type:   uint64T,
+			Offset: btf.Bits(currentOffset * 8),
+		})
+		currentOffset += 8
+		totalSize += 8
+	}
+	if field4 {
+		str := CString(16) // 64 bytes for string
+		members = append(members, btf.Member{
+			Name:   "field4",
+			Type:   str,
+			Offset: btf.Bits(currentOffset * 8),
+		})
+		currentOffset += 16 // 64 bytes for string
+		totalSize += 16
+	}
+
+	// To simplify poc we only use int64 fields
 
 	btfStruct := &btf.Struct{
-		Name: "value",
-		Size: 8 * 3,
-		Members: []btf.Member{
-			{
-				Name:   "bar1",
-				Type:   int64T,
-				Offset: 0,
-			},
-			{
-				Name:   "field1",
-				Type:   int64T,
-				Offset: 64,
-			},
-			{
-				Name:   "field2",
-				Type:   int64T,
-				Offset: 128,
-			},
-			{
-				Name:   "bar2",
-				Type:   int64T,
-				Offset: 192,
-			},
-		},
+		Name:    "value",
+		Size:    totalSize,
+		Members: members,
 	}
 	types = append(types, btfStruct)
 
 	builder, err := btf.NewBuilder(types)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create BTF builder: %w", err)
+		return nil, 0, fmt.Errorf("failed to create BTF builder: %w", err)
 	}
 
 	buf := make([]byte, 0, 10*1024*1024) // 1MB buffer
 	mergedBtfRaw, err := builder.Marshal(buf, nil)
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal BTF: %w", err)
+		return nil, 0, fmt.Errorf("failed to marshal BTF: %w", err)
 	}
 
 	mergedBtf, err := btf.LoadSpecFromReader(bytes.NewReader(mergedBtfRaw))
 	if err != nil {
-		return nil, fmt.Errorf("failed to load merged BTF spec: %w", err)
+		return nil, 0, fmt.Errorf("failed to load merged BTF spec: %w", err)
 	}
 
-	return mergedBtf, nil
+	return mergedBtf, totalSize, nil
 }
 
 //go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target bpfel -cc clang -cflags ${CFLAGS} host ./host.bpf.c -- -I /usr/include/x86_64-linux-gnu
 func do() error {
+	// load btf spec from host
+	//hostBtf, err := btf.LoadSpec("host_bpfel.o")
+	hostBtf, totalSize, err := buildHostBtf()
+	if err != nil {
+		return fmt.Errorf("failed to load BTF spec from host: %w", err)
+	}
+	//fmt.Printf("BTF spec loaded from host: %+v\n", hostBtf)
+
+	kernelSpec, err := btf.LoadKernelSpec()
+	if err != nil {
+		return fmt.Errorf("failed to load kernel BTF spec: %w", err)
+	}
+
+	mergedBtf, err := mergeBtfs(hostBtf, kernelSpec)
+	if err != nil {
+		return fmt.Errorf("failed to merge BTF specs: %w", err)
+	}
+
 	/** host **/
 	hostSpec, err := loadHost()
 	if err != nil {
 		return fmt.Errorf("failed to load host BPF collection spec: %w", err)
 	}
 
+	gadgetMapHostSpec, ok := hostSpec.Maps["gadget_map"]
+	if !ok {
+		return fmt.Errorf("gadget_map not found in host BPF objects")
+	}
+	fmt.Printf("gadget_map host spec: %+v\n", gadgetMapHostSpec)
+	gadgetMapHostSpec.ValueSize = totalSize
+
 	hostObjects := &hostObjects{}
-	if err := loadHostObjects(hostObjects, nil); err != nil {
+
+	hostOpts := &ebpf.CollectionOptions{
+		Programs: ebpf.ProgramOptions{
+			KernelTypes: mergedBtf,
+		},
+	}
+
+	if err := hostSpec.LoadAndAssign(hostObjects, hostOpts); err != nil {
 		printVerifierError(err)
 		return err
 	}
@@ -130,11 +221,6 @@ func do() error {
 	}
 	defer hostL.Close()
 
-	gadgetMapHostSpec, ok := hostSpec.Maps["gadget_map"]
-	if !ok {
-		return fmt.Errorf("gadget_map not found in host BPF objects")
-	}
-	fmt.Printf("gadget_map host spec: %+v\n", gadgetMapHostSpec)
 	/**** host done ***/
 
 	/** user **/
@@ -151,16 +237,11 @@ func do() error {
 
 	//if gadgetMapHostSpec.ValueSize > gadgetMapUserSpec.ValueSize {
 	fmt.Printf("updating user map spec to match value size\n")
-	gadgetMapUserSpec.ValueSize = gadgetMapHostSpec.ValueSize
-	//}
+	//gadgetMapUserSpec.ValueSize = gadgetMapHostSpec.ValueSize
 
-	// load btf spec from host
-	//hostBtf, err := btf.LoadSpec("host_bpfel.o")
-	hostBtf, err := buildHostBtf()
-	if err != nil {
-		return fmt.Errorf("failed to load BTF spec from host: %w", err)
-	}
-	//fmt.Printf("BTF spec loaded from host: %+v\n", hostBtf)
+	gadgetMapUserSpec.ValueSize = totalSize
+
+	//}
 
 	iterator := hostBtf.Iterate()
 	for iterator.Next() {
@@ -176,17 +257,7 @@ func do() error {
 			field.Name, field.Type.TypeName(), field.BitfieldSize, field.Offset)
 	}
 
-	kernelSpec, err := btf.LoadKernelSpec()
-	if err != nil {
-		return fmt.Errorf("failed to load kernel BTF spec: %w", err)
-	}
-
-	mergedBtf, err := mergeBtfs(hostBtf, kernelSpec)
-	if err != nil {
-		return fmt.Errorf("failed to merge BTF specs: %w", err)
-	}
-
-	opts := ebpf.CollectionOptions{
+	userOpts := ebpf.CollectionOptions{
 		MapReplacements: map[string]*ebpf.Map{
 			"gadget_map": hostObjects.GadgetMap,
 		},
@@ -194,7 +265,7 @@ func do() error {
 			KernelTypes: mergedBtf,
 		},
 	}
-	col, err := ebpf.NewCollectionWithOptions(spec, opts)
+	col, err := ebpf.NewCollectionWithOptions(spec, userOpts)
 	if err != nil {
 		printVerifierError(err)
 		return err

@@ -15,10 +15,10 @@ import (
 type hostKey struct{ Key uint32 }
 
 type hostValue struct {
-	Bar1   uint64
 	Field1 uint64
 	Field2 uint64
-	Bar2   uint64
+	Field3 uint64
+	Field4 [16]int8
 }
 
 // loadHost returns the embedded CollectionSpec for host.
