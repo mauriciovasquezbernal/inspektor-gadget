@@ -60,33 +60,40 @@ struct {
 	__type(value, struct sockets_value);
 } gadget_sockets SEC(".maps");
 
+struct {
+	__uint(type, BPF_MAP_TYPE_HASH);
+	__uint(max_entries, MAX_SOCKETS);
+	__type(key, struct sockets_key);
+	__type(value, struct sockets_value_extended);
+} gadget_sockets_extended SEC(".maps");
+
 #ifdef GADGET_TYPE_NETWORKING
-static __always_inline struct sockets_value *
-gadget_socket_lookup(const struct __sk_buff *skb)
+
+static __always_inline int
+gadget_socket_get_key(struct sockets_key *key, const struct __sk_buff *skb)
 {
-	struct sockets_value *ret;
-	struct sockets_key key = {
-		0,
-	};
+	if (!key || !skb)
+		return -1;
+
 	int l4_off;
 	__u16 h_proto;
 	int i;
 	long err;
 
-	key.netns = skb->cb[0]; // cb[0] initialized by dispatcher.bpf.c
+	key->netns = skb->cb[0]; // cb[0] initialized by dispatcher.bpf.c
 	err = bpf_skb_load_bytes(skb, offsetof(struct ethhdr, h_proto),
 				 &h_proto, sizeof(h_proto));
 	if (err < 0)
-		return 0;
+		return -1;
 
 	switch (h_proto) {
 	case bpf_htons(SE_ETH_P_IP):
-		key.family = SE_AF_INET;
+		key->family = SE_AF_INET;
 		err = bpf_skb_load_bytes(
 			skb, SE_ETH_HLEN + offsetof(struct iphdr, protocol),
-			&key.proto, sizeof(key.proto));
+			&key->proto, sizeof(key->proto));
 		if (err < 0)
-			return 0;
+			return -1;
 
 		// An IPv4 header doesn't have a fixed size. The IHL field of a packet
 		// represents the size of the IP header in 32-bit words, so we need to
@@ -95,19 +102,19 @@ gadget_socket_lookup(const struct __sk_buff *skb)
 		err = bpf_skb_load_bytes(skb, SE_ETH_HLEN, &ihl_byte,
 					 sizeof(ihl_byte));
 		if (err < 0)
-			return 0;
+			return -1;
 		struct iphdr *iph = (struct iphdr *)&ihl_byte;
 		__u8 ip_header_len = iph->ihl * 4;
 		l4_off = SE_ETH_HLEN + ip_header_len;
 		break;
 
 	case bpf_htons(SE_ETH_P_IPV6):
-		key.family = SE_AF_INET6;
+		key->family = SE_AF_INET6;
 		err = bpf_skb_load_bytes(skb,
 					 SE_ETH_HLEN + SE_IPV6_NEXTHDR_OFFSET,
-					 &key.proto, sizeof(key.proto));
+					 &key->proto, sizeof(key->proto));
 		if (err < 0)
-			return 0;
+			return -1;
 		l4_off = SE_ETH_HLEN + SE_IPV6_HLEN;
 
 // Parse IPv6 extension headers
@@ -118,18 +125,18 @@ gadget_socket_lookup(const struct __sk_buff *skb)
 			__u8 off;
 
 			// TCP or UDP found
-			if (key.proto == SE_NEXTHDR_TCP ||
-			    key.proto == SE_NEXTHDR_UDP)
+			if (key->proto == SE_NEXTHDR_TCP ||
+			    key->proto == SE_NEXTHDR_UDP)
 				break;
 
 			err = bpf_skb_load_bytes(skb, l4_off, &nextproto,
 						 sizeof(nextproto));
 			if (err < 0)
-				return 0;
+				return -1;
 
 			// Unfortunately, each extension header has a different way to calculate the header length.
 			// Support the ones defined in ipv6_ext_hdr(). See ipv6_skip_exthdr().
-			switch (key.proto) {
+			switch (key->proto) {
 			case SE_NEXTHDR_FRAGMENT:
 				// No hdrlen in the fragment header
 				l4_off += 8;
@@ -139,7 +146,7 @@ gadget_socket_lookup(const struct __sk_buff *skb)
 				err = bpf_skb_load_bytes(skb, l4_off + 1, &off,
 							 sizeof(off));
 				if (err < 0)
-					return 0;
+					return -1;
 				l4_off += 4 * (off + 2);
 				break;
 			case SE_NEXTHDR_HOP:
@@ -149,26 +156,26 @@ gadget_socket_lookup(const struct __sk_buff *skb)
 				err = bpf_skb_load_bytes(skb, l4_off + 1, &off,
 							 sizeof(off));
 				if (err < 0)
-					return 0;
+					return -1;
 				l4_off += 8 * (off + 1);
 				break;
 			case SE_NEXTHDR_NONE:
 				// Nothing more in the packet. Not even TCP or UDP.
-				return 0;
+				return -1;
 			default:
 				// Unknown header
-				return 0;
+				return -1;
 			}
-			key.proto = nextproto;
+			key->proto = nextproto;
 		}
 		break;
 
 	default:
-		return 0;
+		return -1;
 	}
 
 	int off = l4_off;
-	switch (key.proto) {
+	switch (key->proto) {
 	case IPPROTO_TCP:
 		if (skb->pkt_type == SE_PACKET_HOST)
 			off += SE_TCPHDR_DEST_OFFSET;
@@ -182,13 +189,30 @@ gadget_socket_lookup(const struct __sk_buff *skb)
 			off += SE_UDPHDR_SOURCE_OFFSET;
 		break;
 	default:
-		return 0;
+		return -1;
 	}
 
-	err = bpf_skb_load_bytes(skb, off, &key.port, sizeof(key.port));
+	err = bpf_skb_load_bytes(skb, off, &key->port, sizeof(key->port));
+	if (err < 0)
+		return -1;
+	key->port = bpf_ntohs(key->port);
+
+	return 0;
+}
+
+static __always_inline struct sockets_value *
+gadget_socket_lookup(const struct __sk_buff *skb)
+{
+	struct sockets_value *ret;
+	struct sockets_key key = {
+		0,
+	};
+
+	int err;
+
+	err = gadget_socket_get_key(&key, skb);
 	if (err < 0)
 		return 0;
-	key.port = bpf_ntohs(key.port);
 
 	ret = bpf_map_lookup_elem(&gadget_sockets, &key);
 	if (ret)
@@ -204,6 +228,24 @@ gadget_socket_lookup(const struct __sk_buff *skb)
 
 	return 0;
 }
+
+static __always_inline struct sockets_value_extended *
+gadget_socket_lookup_extended(const struct __sk_buff *skb)
+{
+	struct sockets_key key = {
+		0,
+	};
+
+	int err;
+
+	err = gadget_socket_get_key(&key, skb);
+	if (err < 0)
+		return 0;
+
+	return bpf_map_lookup_elem(&gadget_sockets_extended, &key);
+	// TODO: do we need to handle dual-stack sockets here as well?
+}
+
 #endif
 
 #ifdef GADGET_TYPE_TRACING

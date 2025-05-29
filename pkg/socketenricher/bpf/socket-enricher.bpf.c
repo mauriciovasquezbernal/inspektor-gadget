@@ -32,12 +32,21 @@ struct {
 
 const volatile bool disable_bpf_iterators = 0;
 
+const volatile bool paths = false;
+
 struct {
 	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
 	__uint(max_entries, 1);
 	__type(key, int);
 	__type(value, struct sockets_value);
 } ig_tmp_sockets_value SEC(".maps");
+
+struct {
+	__uint(type, BPF_MAP_TYPE_PERCPU_ARRAY);
+	__uint(max_entries, 1);
+	__type(key, int);
+	__type(value, struct sockets_value_extended);
+} ig_tmp_sockets_value_extended SEC(".maps");
 
 static const struct sockets_value empty_sockets_value = {};
 
@@ -81,12 +90,6 @@ static __always_inline void insert_current_socket(struct sock *sock)
 				      parent->comm);
 		socket_value->ppid = (__u32)BPF_CORE_READ(parent, tgid);
 	}
-	char *cwd = get_path_str(&fs->pwd);
-	bpf_probe_read_kernel_str(socket_value->cwd, sizeof(socket_value->cwd),
-				  cwd);
-	char *exepath = get_path_str(&exe_file->f_path);
-	bpf_probe_read_kernel_str(socket_value->exepath,
-				  sizeof(socket_value->exepath), exepath);
 
 	socket_value->sock = (__u64)sock;
 	if (socket_key.family == AF_INET6)
@@ -94,7 +97,26 @@ static __always_inline void insert_current_socket(struct sock *sock)
 			sock, __sk_common.skc_ipv6only);
 
 	bpf_map_update_elem(&gadget_sockets, &socket_key, socket_value,
-			    BPF_ANY);
+		BPF_ANY);
+
+	// handle extended values
+	if (!paths)
+		return;
+
+	struct sockets_value_extended *sockets_value_extended =
+		bpf_map_lookup_elem(&ig_tmp_sockets_value_extended, &zero);
+	if (!sockets_value_extended)
+		return;
+
+	char *cwd = get_path_str(&fs->pwd);
+	bpf_probe_read_kernel_str(sockets_value_extended->cwd, sizeof(sockets_value_extended->cwd),
+				  cwd);
+	char *exepath = get_path_str(&exe_file->f_path);
+	bpf_probe_read_kernel_str(sockets_value_extended->exepath,
+				  sizeof(sockets_value_extended->exepath), exepath);
+
+	bpf_map_update_elem(&gadget_sockets_extended, &socket_key, sockets_value_extended,
+					BPF_ANY);
 }
 
 static __always_inline int remove_socket(struct sock *sock)

@@ -70,11 +70,12 @@ type attachment struct {
 }
 
 type Tracer[Event any] struct {
-	socketEnricherMap *ebpf.Map
-	dispatcherMap     *ebpf.Map
-	collection        *ebpf.Collection
-	prog              *ebpf.Program
-	perfRd            *perf.Reader
+	socketEnricherMap         *ebpf.Map
+	socketEnricherExtendedMap *ebpf.Map
+	dispatcherMap             *ebpf.Map
+	collection                *ebpf.Collection
+	prog                      *ebpf.Program
+	perfRd                    *perf.Reader
 
 	// key: network namespace inode number
 	// value: Tracelet
@@ -156,8 +157,9 @@ func NewTracer[Event any]() (_ *Tracer[Event], err error) {
 	return t, nil
 }
 
-func (t *Tracer[Event]) SetSocketEnricherMap(m *ebpf.Map) {
+func (t *Tracer[Event]) SetSocketEnricherMap(m *ebpf.Map, m2 *ebpf.Map) {
 	t.socketEnricherMap = m
+	t.socketEnricherExtendedMap = m2
 }
 
 func (t *Tracer[Event]) Run(
@@ -219,6 +221,7 @@ func (t *Tracer[Event]) Run(
 	if usesSocketEnricher && t.socketEnricherMap != nil {
 		mapReplacements := map[string]*ebpf.Map{}
 		mapReplacements[socketenricher.SocketsMapName] = t.socketEnricherMap
+		mapReplacements[socketenricher.SocketsExtendedMapName] = t.socketEnricherExtendedMap
 		opts.MapReplacements = mapReplacements
 	}
 

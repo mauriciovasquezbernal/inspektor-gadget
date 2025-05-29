@@ -31,11 +31,14 @@ type socketenricherSocketsValue struct {
 	Ptask             [16]int8
 	Sock              uint64
 	DeletionTimestamp uint64
-	Cwd               [512]int8
-	Exepath           [512]int8
 	Ppid              uint32
 	Ipv6only          int8
 	_                 [3]byte
+}
+
+type socketenricherSocketsValueExtended struct {
+	Cwd     [512]int8
+	Exepath [512]int8
 }
 
 // loadSocketenricher returns the embedded CollectionSpec for socketenricher.
@@ -96,10 +99,12 @@ type socketenricherProgramSpecs struct {
 //
 // It can be passed ebpf.CollectionSpec.Assign.
 type socketenricherMapSpecs struct {
-	Bufs              *ebpf.MapSpec `ebpf:"bufs"`
-	GadgetSockets     *ebpf.MapSpec `ebpf:"gadget_sockets"`
-	IgTmpSocketsValue *ebpf.MapSpec `ebpf:"ig_tmp_sockets_value"`
-	Start             *ebpf.MapSpec `ebpf:"start"`
+	Bufs                      *ebpf.MapSpec `ebpf:"bufs"`
+	GadgetSockets             *ebpf.MapSpec `ebpf:"gadget_sockets"`
+	GadgetSocketsExtended     *ebpf.MapSpec `ebpf:"gadget_sockets_extended"`
+	IgTmpSocketsValue         *ebpf.MapSpec `ebpf:"ig_tmp_sockets_value"`
+	IgTmpSocketsValueExtended *ebpf.MapSpec `ebpf:"ig_tmp_sockets_value_extended"`
+	Start                     *ebpf.MapSpec `ebpf:"start"`
 }
 
 // socketenricherVariableSpecs contains global variables before they are loaded into the kernel.
@@ -107,6 +112,7 @@ type socketenricherMapSpecs struct {
 // It can be passed ebpf.CollectionSpec.Assign.
 type socketenricherVariableSpecs struct {
 	DisableBpfIterators *ebpf.VariableSpec `ebpf:"disable_bpf_iterators"`
+	Paths               *ebpf.VariableSpec `ebpf:"paths"`
 }
 
 // socketenricherObjects contains all objects after they have been loaded into the kernel.
@@ -129,17 +135,21 @@ func (o *socketenricherObjects) Close() error {
 //
 // It can be passed to loadSocketenricherObjects or ebpf.CollectionSpec.LoadAndAssign.
 type socketenricherMaps struct {
-	Bufs              *ebpf.Map `ebpf:"bufs"`
-	GadgetSockets     *ebpf.Map `ebpf:"gadget_sockets"`
-	IgTmpSocketsValue *ebpf.Map `ebpf:"ig_tmp_sockets_value"`
-	Start             *ebpf.Map `ebpf:"start"`
+	Bufs                      *ebpf.Map `ebpf:"bufs"`
+	GadgetSockets             *ebpf.Map `ebpf:"gadget_sockets"`
+	GadgetSocketsExtended     *ebpf.Map `ebpf:"gadget_sockets_extended"`
+	IgTmpSocketsValue         *ebpf.Map `ebpf:"ig_tmp_sockets_value"`
+	IgTmpSocketsValueExtended *ebpf.Map `ebpf:"ig_tmp_sockets_value_extended"`
+	Start                     *ebpf.Map `ebpf:"start"`
 }
 
 func (m *socketenricherMaps) Close() error {
 	return _SocketenricherClose(
 		m.Bufs,
 		m.GadgetSockets,
+		m.GadgetSocketsExtended,
 		m.IgTmpSocketsValue,
+		m.IgTmpSocketsValueExtended,
 		m.Start,
 	)
 }
@@ -149,6 +159,7 @@ func (m *socketenricherMaps) Close() error {
 // It can be passed to loadSocketenricherObjects or ebpf.CollectionSpec.LoadAndAssign.
 type socketenricherVariables struct {
 	DisableBpfIterators *ebpf.Variable `ebpf:"disable_bpf_iterators"`
+	Paths               *ebpf.Variable `ebpf:"paths"`
 }
 
 // socketenricherPrograms contains all programs after they have been loaded into the kernel.
