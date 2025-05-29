@@ -125,7 +125,13 @@ func (i *SocketEnricherInstance) PreGadgetRun() error {
 	defer i.manager.mu.Unlock()
 
 	if i.manager.refCount == 0 {
-		t, err := tracer.NewSocketEnricher()
+		// TODO: make this configurable
+		config := tracer.Config{
+			//CwdEnabled:     true,
+			ExepathEnabled: true,
+		}
+
+		t, err := tracer.NewSocketEnricher(config)
 		if err != nil {
 			return err
 		}
@@ -182,7 +188,19 @@ func (s *SocketEnricher) Priority() int {
 }
 
 func (i *SocketEnricherInstance) PreStart(gadgetCtx operators.GadgetContext) error {
-	return i.PreGadgetRun()
+	err := i.PreGadgetRun()
+	if err != nil {
+		return err
+	}
+
+	spec, structSize, err := i.manager.socketEnricher.Btf()
+	if err != nil {
+		return err
+	}
+
+	gadgetCtx.SetVar("socketEnricherbtf", spec)
+	gadgetCtx.SetVar("socketEnricherStructSize", structSize)
+	return nil
 }
 
 func (i *SocketEnricherInstance) Start(gadgetCtx operators.GadgetContext) error {

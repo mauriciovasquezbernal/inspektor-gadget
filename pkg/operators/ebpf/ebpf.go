@@ -38,6 +38,7 @@ import (
 	"oras.land/oras-go/v2"
 
 	"github.com/inspektor-gadget/inspektor-gadget/internal/version"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/btfhelpers"
 	containercollection "github.com/inspektor-gadget/inspektor-gadget/pkg/container-collection"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/datasource"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadget-service/api"
@@ -626,6 +627,44 @@ func (i *ebpfInstance) Start(gadgetCtx operators.GadgetContext) error {
 		}
 	}
 
+	opts := ebpf.CollectionOptions{
+		MapReplacements: mapReplacements,
+	}
+
+	if seBtfSpecI, ok := gadgetCtx.GetVar("socketEnricherbtf"); ok {
+		gadgetCtx.Logger().Debugf("using socket enricher BTF spec from context")
+		seBtfSpec, ok := seBtfSpecI.(*btf.Spec)
+		if !ok {
+			return fmt.Errorf("invalid socket enricher BTF spec: expected btf.Spec, got %T", seBtfSpecI)
+		}
+
+		btfSpec := opts.Programs.KernelTypes
+		if btfSpec == nil {
+			btfSpec, err = btf.LoadKernelSpec()
+			if err != nil {
+				return fmt.Errorf("loading kernel BTF spec: %w", err)
+			}
+		}
+
+		btfSpec, err := btfhelpers.MergeBtfs(btfSpec, seBtfSpec)
+		if err != nil {
+			return fmt.Errorf("merging BTF specs: %w", err)
+		}
+
+		opts.Programs.KernelTypes = btfSpec
+
+		structSizeI, ok := gadgetCtx.GetVar("socketEnricherStructSize")
+		if !ok {
+			return fmt.Errorf("missing socket enricher struct size in context")
+		}
+		structSize, ok := structSizeI.(uint32)
+		if !ok {
+			return fmt.Errorf("invalid socket enricher struct size: expected uint32, got %T", structSizeI)
+		}
+		fmt.Printf("setting socket enricher struct size to %d\n", structSize)
+		i.collectionSpec.Maps[socketenricher.SocketsMapName].ValueSize = structSize
+	}
+
 	for _, v := range i.vars {
 		res, ok := gadgetCtx.GetVar(v.name)
 		if !ok {
@@ -658,9 +697,6 @@ func (i *ebpfInstance) Start(gadgetCtx operators.GadgetContext) error {
 	}
 
 	i.logger.Debugf("creating ebpf collection")
-	opts := ebpf.CollectionOptions{
-		MapReplacements: mapReplacements,
-	}
 
 	// check if the btfgen operator has stored the kernel types in the context
 	if btfSpecI, ok := gadgetCtx.GetVar(kernelTypesVar); ok {
@@ -671,6 +707,7 @@ func (i *ebpfInstance) Start(gadgetCtx operators.GadgetContext) error {
 		}
 		opts.Programs.KernelTypes = btfSpec
 	}
+
 	collection, err := ebpf.NewCollectionWithOptions(i.collectionSpec, opts)
 	if err != nil {
 		var verifierErr *ebpf.VerifierError

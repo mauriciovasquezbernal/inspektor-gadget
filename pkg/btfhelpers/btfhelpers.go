@@ -17,6 +17,8 @@
 package btfhelpers
 
 import (
+	"bytes"
+	"fmt"
 	"reflect"
 
 	"github.com/cilium/ebpf/btf"
@@ -149,4 +151,38 @@ func getSimpleType(typ btf.Type) reflect.Type {
 		}
 	}
 	return nil
+}
+
+// TODO: make more generic
+func MergeBtfs(hostBtf, kernelBtf *btf.Spec) (*btf.Spec, error) {
+	kernelTypes := []btf.Type{}
+	iterator := kernelBtf.Iterate()
+	for iterator.Next() {
+		kernelTypes = append(kernelTypes, iterator.Type)
+	}
+
+	builder, err := btf.NewBuilder(kernelTypes)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create BTF builder: %w", err)
+	}
+
+	iterator = hostBtf.Iterate()
+	for iterator.Next() {
+		if _, err := builder.Add(iterator.Type); err != nil {
+			return nil, fmt.Errorf("failed to add host BTF type: %w", err)
+		}
+	}
+
+	buf := make([]byte, 0, 10*1024*1024) // 10MB buffer
+	mergedBtfRaw, err := builder.Marshal(buf, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal BTF: %w", err)
+	}
+
+	mergedBtf, err := btf.LoadSpecFromReader(bytes.NewReader(mergedBtfRaw))
+	if err != nil {
+		return nil, fmt.Errorf("failed to load merged BTF spec: %w", err)
+	}
+
+	return mergedBtf, nil
 }

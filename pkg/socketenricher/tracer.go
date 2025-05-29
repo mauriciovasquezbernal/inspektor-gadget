@@ -15,17 +15,17 @@
 package socketenricher
 
 import (
+	"bytes"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/cilium/ebpf"
+	"github.com/cilium/ebpf/btf"
 	"github.com/cilium/ebpf/link"
-	log "github.com/sirupsen/logrus"
 
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/btfgen"
+	"github.com/inspektor-gadget/inspektor-gadget/pkg/btfhelpers"
 	"github.com/inspektor-gadget/inspektor-gadget/pkg/gadgets"
-	"github.com/inspektor-gadget/inspektor-gadget/pkg/kallsyms"
 	bpfiterns "github.com/inspektor-gadget/inspektor-gadget/pkg/utils/bpf-iter-ns"
 )
 
@@ -49,14 +49,22 @@ type SocketEnricher struct {
 
 	closeOnce sync.Once
 	done      chan bool
+	config    Config
 }
 
 func (se *SocketEnricher) SocketsMap() *ebpf.Map {
 	return se.objs.GadgetSockets
 }
 
-func NewSocketEnricher() (*SocketEnricher, error) {
-	se := &SocketEnricher{}
+type Config struct {
+	CwdEnabled     bool
+	ExepathEnabled bool
+}
+
+func NewSocketEnricher(config Config) (*SocketEnricher, error) {
+	se := &SocketEnricher{
+		config: config,
+	}
 
 	if err := se.start(); err != nil {
 		se.Close()
@@ -66,35 +74,195 @@ func NewSocketEnricher() (*SocketEnricher, error) {
 	return se, nil
 }
 
-func (se *SocketEnricher) start() error {
-	specIter, err := loadSocketsiter()
-	if err != nil {
-		return fmt.Errorf("loading socketsiter asset: %w", err)
+func BtfInt(size uint32, encoding btf.IntEncoding) *btf.Int {
+	return &btf.Int{
+		Size:     size,
+		Encoding: encoding,
+	}
+}
+
+func CString(nelems uint32) *btf.Array {
+	// TODO: do I need to register these types?
+	charT := BtfInt(8, btf.Char)
+	indexT := BtfInt(32, btf.Unsigned)
+
+	return &btf.Array{
+		Index:  indexT,
+		Type:   charT,
+		Nelems: nelems,
+	}
+}
+
+func (se *SocketEnricher) Btf() (*btf.Spec, uint32, error) {
+	uint8T := BtfInt(8, btf.Unsigned)
+	uint16T := BtfInt(16, btf.Unsigned)
+	uint32T := BtfInt(32, btf.Unsigned)
+	uint64T := BtfInt(64, btf.Unsigned)
+	int8T := BtfInt(8, btf.Signed)
+	int16T := BtfInt(16, btf.Signed)
+	int32T := BtfInt(32, btf.Signed)
+	int64T := BtfInt(64, btf.Signed)
+	cString16 := CString(16)
+	cString512 := CString(512)
+
+	types := []btf.Type{
+		uint8T,
+		uint16T,
+		uint32T,
+		uint64T,
+		int8T,
+		int16T,
+		int32T,
+		int64T,
+		cString16,
+		cString512,
 	}
 
-	err = kallsyms.SpecUpdateAddresses(specIter, []string{"socket_file_ops"})
+	currentOffset := uint32(0)
+
+	// fixed fields
+	// BE AWARE OF PADDING!
+	members := []btf.Member{
+		{
+			Name:   "mntns",
+			Type:   uint64T,
+			Offset: btf.Bits(0 * 8),
+		},
+		{
+			Name:   "pid_tgid",
+			Type:   uint64T,
+			Offset: btf.Bits(8 * 8),
+		},
+		{
+			Name:   "uid_gid",
+			Type:   uint64T,
+			Offset: btf.Bits(16 * 8),
+		},
+		{
+			Name:   "ptask",
+			Type:   cString16,
+			Offset: btf.Bits(24 * 8),
+		},
+		{
+			Name:   "task",
+			Type:   cString16,
+			Offset: btf.Bits(40 * 8),
+		},
+		{
+			Name:   "sock",
+			Type:   uint64T,
+			Offset: btf.Bits(56 * 8),
+		},
+		{
+			Name:   "deletion_timestamp",
+			Type:   uint64T,
+			Offset: btf.Bits(64 * 8),
+		},
+		{
+			Name:   "ppid",
+			Type:   uint32T,
+			Offset: btf.Bits(72 * 8),
+		},
+		{
+			Name:   "ipv6only",
+			Type:   uint32T,
+			Offset: btf.Bits(76 * 8),
+		},
+	}
+	currentOffset = 80
+
+	// optional fields
+	if se.config.CwdEnabled {
+		members = append(members, btf.Member{
+			Name:   "cwd",
+			Type:   cString512,
+			Offset: btf.Bits(currentOffset * 8),
+		})
+		currentOffset += 512
+
+	}
+	if se.config.ExepathEnabled {
+		members = append(members, btf.Member{
+			Name:   "exepath",
+			Type:   cString512,
+			Offset: btf.Bits(currentOffset * 8),
+		})
+		currentOffset += 512
+	}
+
+	btfStruct := &btf.Struct{
+		Name:    "sockets_value",
+		Size:    currentOffset,
+		Members: members,
+	}
+	types = append(types, btfStruct)
+
+	builder, err := btf.NewBuilder(types)
 	if err != nil {
-		// Being unable to access to /proc/kallsyms can be caused by not having
-		// CAP_SYSLOG.
-		log.Warnf("updating socket_file_ops address with ksyms: %v\nEither you cannot access /proc/kallsyms or this file does not contain socket_file_ops", err)
+		return nil, 0, fmt.Errorf("failed to create BTF builder: %w", err)
+	}
+
+	buf := make([]byte, 0, 10*1024*1024) // 1MB buffer
+	mergedBtfRaw, err := builder.Marshal(buf, nil)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to marshal BTF: %w", err)
+	}
+
+	btfStrutBtf, err := btf.LoadSpecFromReader(bytes.NewReader(mergedBtfRaw))
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to load merged BTF spec: %w", err)
+	}
+
+	return btfStrutBtf, btfStruct.Size, nil
+}
+
+func (se *SocketEnricher) start() error {
+	//	specIter, err := loadSocketsiter()
+	//	if err != nil {
+	//		return fmt.Errorf("loading socketsiter asset: %w", err)
+	//	}
+	//
+	//	err = kallsyms.SpecUpdateAddresses(specIter, []string{"socket_file_ops"})
+	//	if err != nil {
+	//		// Being unable to access to /proc/kallsyms can be caused by not having
+	//		// CAP_SYSLOG.
+	//		log.Warnf("updating socket_file_ops address with ksyms: %v\nEither you cannot access /proc/kallsyms or this file does not contain socket_file_ops", err)
+	//	}
+
+	// TODO: btfgen support
+	seBtf, structSize, err := se.Btf()
+	if err != nil {
+		return fmt.Errorf("getting BTF spec: %w", err)
+	}
+	kernelSpec, err := btf.LoadKernelSpec()
+	if err != nil {
+		return err
+	}
+
+	mergedBtf, err := btfhelpers.MergeBtfs(kernelSpec, seBtf)
+	if err != nil {
+		return fmt.Errorf("merging BTF specs: %w", err)
 	}
 
 	opts := ebpf.CollectionOptions{
 		Programs: ebpf.ProgramOptions{
-			KernelTypes: btfgen.GetBTFSpec(),
+			KernelTypes: mergedBtf,
 		},
 	}
 
-	disableBPFIterators := false
-	if err := specIter.LoadAndAssign(&se.objsIter, nil); err != nil {
-		disableBPFIterators = true
-		log.Warnf("Socket enricher: skip loading iterators: %v", err)
-	}
+	// TODO: enable later on!
+	disableBPFIterators := true
+	//if err := specIter.LoadAndAssign(&se.objsIter, nil); err != nil {
+	//	disableBPFIterators = true
+	//	log.Warnf("Socket enricher: skip loading iterators: %v", err)
+	//}
 
 	spec, err := loadSocketenricher()
 	if err != nil {
 		return fmt.Errorf("loading socket enricher asset: %w", err)
 	}
+
+	spec.Maps[SocketsMapName].ValueSize = structSize
 
 	if disableBPFIterators {
 		socketSpec := &socketenricherSpecs{}

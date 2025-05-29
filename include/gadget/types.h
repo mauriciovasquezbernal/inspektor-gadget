@@ -127,20 +127,29 @@ struct gadget_process {
 	struct gadget_parent parent;
 };
 
+#ifndef BPF_NO_PRESERVE_ACCESS_INDEX
+#pragma clang attribute push (__attribute__((preserve_access_index)), apply_to = record)
+#endif
+
 #define SE_PATH_MAX 512
 
 struct sockets_value {
 	__u64 mntns;
 	__u64 pid_tgid;
 	__u64 uid_gid;
-	char task[TASK_COMM_LEN];
 	char ptask[TASK_COMM_LEN];
+	char task[TASK_COMM_LEN];
 	__u64 sock;
 	__u64 deletion_timestamp;
+	__u32 ppid;
+	__u32 ipv6only;
 	char cwd[SE_PATH_MAX];
 	char exepath[SE_PATH_MAX];
-	__u32 ppid;
-	char ipv6only;
+
 };
+
+#ifndef BPF_NO_PRESERVE_ACCESS_INDEX
+#pragma clang attribute pop
+#endif
 
 #endif /* __TYPES_H */
