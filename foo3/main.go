@@ -2,293 +2,382 @@ package main
 
 import (
 	"bytes"
-	"errors"
+	"debug/elf"
 	"fmt"
-	"os"
-	"os/signal"
-	"syscall"
+	"strings"
+	"unsafe"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
-	"github.com/cilium/ebpf/link"
 )
 
-func printVerifierError(err error) {
-	var ve *ebpf.VerifierError
-	if errors.As(err, &ve) {
-		fmt.Printf("BPF program verification failed: %+v\n", ve)
+func dumpBtfStruct(s *btf.Struct) {
+	fmt.Printf("BTF Struct: %s\n", s.Name)
+	for _, field := range s.Members {
+		fmt.Printf("  Field: %s, Type:%+v\n", field.Name, field.Type)
+		switch field.Name {
+		case "max_entries":
+			if uint32Val, err := uintFromBTF(field.Type); err == nil {
+				fmt.Printf("    max_entries: %d\n", uint32Val)
+			}
+		case "value":
+			vk, ok := field.Type.(*btf.Pointer)
+			if !ok {
+				fmt.Printf("    value is not a pointer: %v\n", field.Type)
+				continue
+			}
+			value := btf.UnderlyingType(vk.Target)
+			//valueStruct := value.(*btf.Struct)
+			fmt.Printf("    value type: %s\n", value)
+		}
 	}
 }
 
-func mergeBtfs(hostBtf, kernelBtf *btf.Spec) (*btf.Spec, error) {
-	kernelTypes := []btf.Type{}
-	iterator := kernelBtf.Iterate()
-	for iterator.Next() {
-		kernelTypes = append(kernelTypes, iterator.Type)
+// uintFromBTF resolves the __uint macro, which is a pointer to a sized
+// array, e.g. for int (*foo)[10], this function will return 10.
+func uintFromBTF(typ btf.Type) (uint32, error) {
+	ptr, ok := typ.(*btf.Pointer)
+	if !ok {
+		return 0, fmt.Errorf("not a pointer: %v", typ)
 	}
 
-	builder, err := btf.NewBuilder(kernelTypes)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create BTF builder: %w", err)
+	arr, ok := ptr.Target.(*btf.Array)
+	if !ok {
+		return 0, fmt.Errorf("not a pointer to array: %v", typ)
 	}
 
-	iterator = hostBtf.Iterate()
-	for iterator.Next() {
-		if _, err := builder.Add(iterator.Type); err != nil {
-			return nil, fmt.Errorf("failed to add host BTF type: %w", err)
+	return arr.Nelems, nil
+}
+
+func do3(file *elf.File, btfSpec *btf.Spec) (map[uintptr]string, error) {
+	fmt.Printf("BTF spec: %+v\n", btfSpec)
+
+	//fmt.Printf("ELF file: %s\n", file)
+
+	ret := make(map[uintptr]string)
+
+	var mapsSec *elf.Section
+
+	for i, sec := range file.Sections {
+		if strings.HasPrefix(sec.Name, ".maps") {
+			//fmt.Printf("Section %d: %s, Type: %s, Flags: %s\n", i, sec.Name, sec.Type, sec.Flags)
+			fmt.Printf("found %s section at %d\n", sec.Name, i)
+			mapsSec = sec
+			break
 		}
 	}
 
-	buf := make([]byte, 0, 10*1024*1024) // 1MB buffer
-	mergedBtfRaw, err := builder.Marshal(buf, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal BTF: %w", err)
+	if mapsSec == nil {
+		return nil, fmt.Errorf("no .maps section found in ELF file")
 	}
 
-	mergedBtf, err := btf.LoadSpecFromReader(bytes.NewReader(mergedBtfRaw))
-	if err != nil {
-		return nil, fmt.Errorf("failed to load merged BTF spec: %w", err)
+	var ds *btf.Datasec
+	if err := btfSpec.TypeByName(".maps", &ds); err != nil {
+		return nil, fmt.Errorf("cannot find section '%s' in BTF: %w", ".maps", err)
 	}
 
-	return mergedBtf, nil
+	for _, vs := range ds.Vars {
+		v, ok := vs.Type.(*btf.Var)
+		if !ok {
+			return nil, fmt.Errorf("section %v: unexpected type %s", ".maps", vs.Type)
+		}
+		name := string(v.Name)
+		fmt.Printf("found map %s\n", name)
+
+		fmt.Printf("vas offset is %d\n", vs.Offset)
+
+		// Each Var representing a BTF map definition contains a Struct.
+		mapStruct, ok := btf.UnderlyingType(v.Type).(*btf.Struct)
+		if !ok {
+			return nil, fmt.Errorf("expected struct, got %s", v.Type)
+		}
+
+		fmt.Printf("map struct: %p\n", mapStruct)
+
+		ret[uintptr(unsafe.Pointer(mapStruct))] = name
+
+		dumpBtfStruct(mapStruct)
+
+	}
+
+	return ret, nil
 }
 
-func BtfInt(size uint32, encoding btf.IntEncoding) *btf.Int {
-	return &btf.Int{
-		Size:     size,
-		Encoding: encoding,
+//func decodeType(typ btf.Type) (btf,) {
+
+func dumpTracer(tracers *elf.Section, s *btf.Struct, ret map[uintptr]string) {
+	data, err := tracers.Data()
+	if err != nil {
+		fmt.Printf("failed to read section data: %v\n", err)
+		return
+	}
+
+	fmt.Printf("tracer: %s\n", s.Name)
+	for _, member := range s.Members {
+		fmt.Printf("  Field: %s, Type:%+v\n", member.Name, member.Type)
+		switch member.Name {
+		//case "type":
+		case "name":
+			target := btf.UnderlyingType(member.Type)
+			//btfPointer := target.(*btf.Pointer)
+			btfArray := target.(*btf.Array)
+			//fmt.Printf("    name: %s elems\n", btfChar.Name)
+
+			offset := member.Offset.Bytes()
+			val := data[offset : offset+btfArray.Nelems]
+			fmt.Printf("	name value: %s\n", string(val))
+
+		//case "foo":
+		//	fmt.Printf("    foo: %s\n", member.Type)
+		//	btfInt := member.Type.(*btf.Int)
+		//	offset := member.Offset.Bytes()
+		//	val := data[offset : offset+btfInt.Size]
+		//	fmt.Printf("	foo value: %x\n", val)
+		//	// val:
+
+		case "map":
+			//if uint32Val, err := uintFromBTF(field.Type); err == nil {
+			//	fmt.Printf("    max_entries: %d\n", uint32Val)
+			//}
+			btfPointer := member.Type.(*btf.Pointer)
+			target := btf.UnderlyingType(btfPointer.Target)
+			btfStruct := target.(*btf.Struct)
+
+			mapName := ret[uintptr(unsafe.Pointer(btfStruct))]
+			fmt.Printf("    map: %s\n", mapName)
+
+		case "type":
+			vk, ok := member.Type.(*btf.Pointer)
+			if !ok {
+				fmt.Printf("    value is not a pointer: %v\n", member.Type)
+				continue
+			}
+			value := btf.UnderlyingType(vk.Target)
+			//valueStruct := value.(*btf.Struct)
+			fmt.Printf("    value type: %s\n", value)
+		}
 	}
 }
 
-func CString(nelems uint32) *btf.Array {
-	// TODO: do I need to register these types?
-	charT := BtfInt(8, btf.Char)
-	indexT := BtfInt(32, btf.Unsigned)
+func do4() error {
+	reader := bytes.NewReader(_HostBytes)
 
-	return &btf.Array{
-		Index:  indexT,
-		Type:   charT,
-		Nelems: nelems,
-	}
-}
-
-func buildHostBtf() (*btf.Spec, uint32, error) {
-	//memberNames := strings.Split(fields, ",")
-	field1 := true
-	field2 := true
-	field3 := true
-	field4 := false
-
-	uint8T := BtfInt(8, btf.Unsigned)
-	uint16T := BtfInt(16, btf.Unsigned)
-	uint32T := BtfInt(32, btf.Unsigned)
-	uint64T := BtfInt(64, btf.Unsigned)
-	int8T := BtfInt(8, btf.Signed)
-	int16T := BtfInt(16, btf.Signed)
-	int32T := BtfInt(32, btf.Signed)
-	int64T := BtfInt(64, btf.Signed)
-
-	types := []btf.Type{
-		uint8T,
-		uint16T,
-		uint32T,
-		uint64T,
-		int8T,
-		int16T,
-		int32T,
-		int64T,
-	}
-
-	currentOffset := uint32(0)
-	totalSize := uint32(0)
-
-	members := []btf.Member{}
-	if field1 {
-		members = append(members, btf.Member{
-			Name:   "field1",
-			Type:   uint64T,
-			Offset: btf.Bits(currentOffset * 8),
-		})
-		currentOffset += 8
-		totalSize += 8
-	}
-	if field2 {
-		members = append(members, btf.Member{
-			Name:   "field2",
-			Type:   uint64T,
-			Offset: btf.Bits(currentOffset * 8),
-		})
-		currentOffset += 8
-		totalSize += 8
-	}
-	if field3 {
-		members = append(members, btf.Member{
-			Name:   "field3",
-			Type:   uint64T,
-			Offset: btf.Bits(currentOffset * 8),
-		})
-		currentOffset += 8
-		totalSize += 8
-	}
-	if field4 {
-		str := CString(16) // 64 bytes for string
-		members = append(members, btf.Member{
-			Name:   "field4",
-			Type:   str,
-			Offset: btf.Bits(currentOffset * 8),
-		})
-		currentOffset += 16 // 64 bytes for string
-		totalSize += 16
-	}
-
-	// To simplify poc we only use int64 fields
-
-	btfStruct := &btf.Struct{
-		Name:    "value",
-		Size:    totalSize,
-		Members: members,
-	}
-	types = append(types, btfStruct)
-
-	builder, err := btf.NewBuilder(types)
+	spec, err := ebpf.LoadCollectionSpecFromReader(reader)
 	if err != nil {
-		return nil, 0, fmt.Errorf("failed to create BTF builder: %w", err)
+		return fmt.Errorf("failed to load BPF collection spec: %w", err)
 	}
 
-	buf := make([]byte, 0, 10*1024*1024) // 1MB buffer
-	mergedBtfRaw, err := builder.Marshal(buf, nil)
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to marshal BTF: %w", err)
-	}
+	fmt.Printf("BPF Collection Spec: %+v\n", spec)
 
-	mergedBtf, err := btf.LoadSpecFromReader(bytes.NewReader(mergedBtfRaw))
-	if err != nil {
-		return nil, 0, fmt.Errorf("failed to load merged BTF spec: %w", err)
-	}
-
-	return mergedBtf, totalSize, nil
-}
-
-//go:generate go run github.com/cilium/ebpf/cmd/bpf2go -target bpfel -cc clang -cflags ${CFLAGS} host ./host.bpf.c -- -I /usr/include/x86_64-linux-gnu
-func do() error {
-	// load btf spec from host
-	//hostBtf, err := btf.LoadSpec("host_bpfel.o")
-	hostBtf, totalSize, err := buildHostBtf()
-	if err != nil {
-		return fmt.Errorf("failed to load BTF spec from host: %w", err)
-	}
-	//fmt.Printf("BTF spec loaded from host: %+v\n", hostBtf)
-
-	kernelSpec, err := btf.LoadKernelSpec()
-	if err != nil {
-		return fmt.Errorf("failed to load kernel BTF spec: %w", err)
-	}
-
-	mergedBtf, err := mergeBtfs(hostBtf, kernelSpec)
-	if err != nil {
-		return fmt.Errorf("failed to merge BTF specs: %w", err)
-	}
-
-	/** host **/
-	hostSpec, err := loadHost()
-	if err != nil {
-		return fmt.Errorf("failed to load host BPF collection spec: %w", err)
-	}
-
-	gadgetMapHostSpec, ok := hostSpec.Maps["gadget_map"]
+	p, ok := spec.Programs["ig_execveat_e"]
 	if !ok {
-		return fmt.Errorf("gadget_map not found in host BPF objects")
-	}
-	fmt.Printf("gadget_map host spec: %+v\n", gadgetMapHostSpec)
-	gadgetMapHostSpec.ValueSize = totalSize
-
-	hostObjects := &hostObjects{}
-
-	hostOpts := &ebpf.CollectionOptions{
-		Programs: ebpf.ProgramOptions{
-			KernelTypes: mergedBtf,
-		},
+		return fmt.Errorf("program 'ig_execveat_e' not found in BPF collection spec")
 	}
 
-	if err := hostSpec.LoadAndAssign(hostObjects, hostOpts); err != nil {
-		printVerifierError(err)
-		return err
+	//fmt.Printf("ins %s\n", p.Instructions.String())
+	for i, ins := range p.Instructions {
+		fmt.Printf("Instruction %d: %+v\n", i, ins)
+		fmt.Printf("reference  %s\n", ins.Reference())
+
 	}
-
-	hostL, err := link.Tracepoint("syscalls", "sys_enter_execve", hostObjects.IgExecveatE, nil)
-	if err != nil {
-		return err
-	}
-	defer hostL.Close()
-
-	/**** host done ***/
-
-	/** user **/
-	spec, err := ebpf.LoadCollectionSpec("user_bpfel.o")
-	if err != nil {
-		return fmt.Errorf("failed to load user BPF collection spec: %w", err)
-	}
-
-	gadgetMapUserSpec, ok := spec.Maps["gadget_map"]
-	if !ok {
-		return fmt.Errorf("gadget_map not found in user BPF collection spec")
-	}
-	fmt.Printf("gadget_map user spec: %+v\n", gadgetMapUserSpec)
-
-	//if gadgetMapHostSpec.ValueSize > gadgetMapUserSpec.ValueSize {
-	fmt.Printf("updating user map spec to match value size\n")
-	//gadgetMapUserSpec.ValueSize = gadgetMapHostSpec.ValueSize
-
-	gadgetMapUserSpec.ValueSize = totalSize
-
-	//}
-
-	iterator := hostBtf.Iterate()
-	for iterator.Next() {
-		t := iterator.Type
-		fmt.Printf("consdering type %+v\n", t.TypeName())
-	}
-
-	btfStruct := &btf.Struct{}
-	hostBtf.TypeByName("value", &btfStruct)
-	fmt.Printf("BTF struct 'val': %+v\n", btfStruct)
-	for _, field := range btfStruct.Members {
-		fmt.Printf("Field: %+v, Type: %s, size: %d, offset: %d\n",
-			field.Name, field.Type.TypeName(), field.BitfieldSize, field.Offset)
-	}
-
-	userOpts := ebpf.CollectionOptions{
-		MapReplacements: map[string]*ebpf.Map{
-			"gadget_map": hostObjects.GadgetMap,
-		},
-		Programs: ebpf.ProgramOptions{
-			KernelTypes: mergedBtf,
-		},
-	}
-	col, err := ebpf.NewCollectionWithOptions(spec, userOpts)
-	if err != nil {
-		printVerifierError(err)
-		return err
-	}
-
-	userL, err := link.Tracepoint("syscalls", "sys_enter_execve", col.Programs["ig_user"], nil)
-	if err != nil {
-		return fmt.Errorf("failed to attach user BPF program: %w", err)
-	}
-	defer userL.Close()
-
-	// wait for ctrl + c
-	fmt.Println("BPF program is running. Press Ctrl+C to exit.")
-	signalChan := make(chan os.Signal, 1)
-	signal.Notify(signalChan, syscall.SIGINT, syscall.SIGTERM)
-	<-signalChan
 
 	return nil
 
 }
 
-func main() {
-	if err := do(); err != nil {
-		fmt.Printf("Error: %v\n", err)
+func do(file *elf.File, btfSpec *btf.Spec, ret map[uintptr]string) error {
+	fmt.Printf("BTF spec: %+v\n", btfSpec)
+
+	//fmt.Printf("ELF file: %s\n", file)
+
+	var tracers *elf.Section
+
+	const secName = ".tracers"
+
+	for i, sec := range file.Sections {
+		if strings.HasPrefix(sec.Name, secName) {
+			//fmt.Printf("Section %d: %s, Type: %s, Flags: %s\n", i, sec.Name, sec.Type, sec.Flags)
+			fmt.Printf("found %s section at %d\n", sec.Name, i)
+			tracers = sec
+			break
+		}
 	}
+
+	if tracers == nil {
+		return fmt.Errorf("no .tracers section found in ELF file")
+	}
+
+	//fmt.Printf("symbols: ")
+	//symbols, err := file.Symbols()
+	//if err != nil {
+	//	return fmt.Errorf("failed to get symbols from ELF file: %w", err)
+	//}
+	//for _, sym := range symbols {
+	//	fmt.Printf("-> %s\n", sym.Name)
+	//}
+
+	var ds *btf.Datasec
+	if err := btfSpec.TypeByName(secName, &ds); err != nil {
+		return fmt.Errorf("cannot find section '%s' in BTF: %w", ".maps", err)
+	}
+
+	for _, vs := range ds.Vars {
+		v, ok := vs.Type.(*btf.Var)
+		if !ok {
+			return fmt.Errorf("section %v: unexpected type %s", ".maps", vs.Type)
+		}
+		name := string(v.Name)
+		fmt.Printf("found tracer %s\n", name)
+
+		// Each Var representing a BTF map definition contains a Struct.
+		mapStruct, ok := btf.UnderlyingType(v.Type).(*btf.Struct)
+		if !ok {
+			return fmt.Errorf("expected struct, got %s", v.Type)
+		}
+
+		dumpTracer(tracers, mapStruct, ret)
+
+	}
+
+	return nil
+}
+
+type tracerDef struct {
+	Name string
+	Type btf.Type
+	// should it really be a string? or (ebpf.Map?)
+	Map string
+}
+
+const tracersSecName = ".tracers"
+const mapsSecName = ".maps"
+
+func extractTracers(file *elf.File, btfSpec *btf.Spec) ([]tracerDef, error) {
+	ret := make([]tracerDef, 0)
+
+	mapsNames := make(map[uintptr]string)
+
+	// TODO: Do I actually need to care about elf sections?
+	//var tracersSec *elf.Section
+	//var mapsSec *elf.Section
+	var ds *btf.Datasec
+
+	//	for _, sec := range file.Sections //{
+	//		if strings.HasPrefix(sec.Name,// tracersSecName) {
+	//			tracersSec = se//c//
+	//		//}//
+	//		//if strings.HasPrefi//x(sec.Name,// mapsSecName) {
+	//		//	mapsSec = se//c//
+	//		//}//
+	//		//if tracersSec !=// ni//l && mapsSe//c != nil {
+	//		//	break//
+	//		//}//
+	//	}//
+	//
+	//	if tracersSec == nil {
+	//		return nil, fmt.Errorf("no .tracers section found in ELF file")
+	//	}
+	//	if mapsSec == nil {
+	//		return nil, fmt.Errorf("no .maps section found in ELF file")
+	//	}
+
+	// do a first pass over the maps to find them
+	if err := btfSpec.TypeByName(mapsSecName, &ds); err != nil {
+		return nil, fmt.Errorf("cannot find section '%s' in BTF: %w", ".maps", err)
+	}
+
+	for _, vs := range ds.Vars {
+		v, ok := vs.Type.(*btf.Var)
+		if !ok {
+			return nil, fmt.Errorf("section %v: unexpected type %s", ".maps", vs.Type)
+		}
+		name := string(v.Name)
+
+		// Each Var representing a BTF map definition contains a Struct.
+		mapStruct, ok := btf.UnderlyingType(v.Type).(*btf.Struct)
+		if !ok {
+			return nil, fmt.Errorf("expected struct, got %s", v.Type)
+		}
+
+		mapsNames[uintptr(unsafe.Pointer(mapStruct))] = name
+	}
+
+	// do a second pass over the tracers
+	if err := btfSpec.TypeByName(tracersSecName, &ds); err != nil {
+		return nil, fmt.Errorf("cannot find section '%s' in BTF: %w", tracersSecName, err)
+	}
+	for _, vs := range ds.Vars {
+		v, ok := vs.Type.(*btf.Var)
+		if !ok {
+			return nil, fmt.Errorf("section %v: unexpected type %s", ".maps", vs.Type)
+		}
+		tracerStruct, ok := btf.UnderlyingType(v.Type).(*btf.Struct)
+		if !ok {
+			return nil, fmt.Errorf("expected struct, got %s", v.Type)
+		}
+
+		tracer := tracerDef{
+			Name: string(v.Name),
+		}
+
+		for _, member := range tracerStruct.Members {
+			switch member.Name {
+			case "map":
+				btfPointer := member.Type.(*btf.Pointer)
+				target := btf.UnderlyingType(btfPointer.Target)
+				btfStruct := target.(*btf.Struct)
+				tracer.Map = mapsNames[uintptr(unsafe.Pointer(btfStruct))]
+			case "type":
+				vk := member.Type.(*btf.Pointer)
+				tracer.Type = btf.UnderlyingType(vk.Target)
+			}
+		}
+
+		// TODO: validate mandatory fields are set
+
+		ret = append(ret, tracer)
+	}
+
+	return ret, nil
+}
+
+func main() {
+	reader := bytes.NewReader(_HostBytes)
+	//reader, err := os.Open("/tmp/trace_open/amd64.bpf.o")
+	//if err != nil {
+	//	panic(fmt.Errorf("failed to open file: %w", err))
+	//}
+
+	//file, err := elf.NewFile(reader)
+	//if err != nil {
+	//	panic(fmt.Errorf("elf failed err %w", err))
+	//}
+
+	btfSpec, err := btf.LoadSpecFromReader(reader)
+	if err != nil {
+		//return fmt.Errorf("failed to load BTF from reader: %w", err)
+		panic(fmt.Errorf("failed to load BTF from reader: %w", err))
+	}
+
+	tracers, err := extractTracers(nil, btfSpec)
+	if err != nil {
+		panic(fmt.Errorf("failed to extract tracers: %w", err))
+	}
+
+	fmt.Printf("Tracers: \n")
+	for _, tracer := range tracers {
+		fmt.Printf("  Name: %s, Map: %s, Type: %s\n", tracer.Name, tracer.Map, tracer.Type)
+	}
+
+	//ret, err := do3(file, btfSpec)
+	//if err != nil {
+	//	fmt.Printf("Error in do1: %v\n", err)
+	//}
+	//if err := do(file, btfSpec, ret); err != nil {
+	//	fmt.Printf("Error: %v\n", err)
+	//}
+
+	//if err := do4(); err != nil {
+	//	fmt.Printf("Error in do4: %v\n", err)
+	//}
 }

@@ -1,7 +1,7 @@
-all: foo3
+all: foo3 host_bpfel.o
 
-foo3: main.go user_bpfel.o host.bpf.c header_host.h
-	go generate . && go build
+foo3: main.go host_bpfel.o
+	go build .
 
-user_bpfel.o: user.bpf.c header_user.h
-	clang -target bpf -Wall -g -O2 -I /usr/include/x86_64-linux-gnu -c user.bpf.c -o user_bpfel.o
+host_bpfel.o: host.bpf.c
+	clang -target bpf -g -c host.bpf.c -o host_bpfel.o -I /usr/include/x86_64-linux-gnu
