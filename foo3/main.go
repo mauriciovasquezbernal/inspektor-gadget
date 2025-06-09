@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"debug/elf"
 	"fmt"
+	"os"
 	"strings"
 	"unsafe"
 
@@ -249,7 +250,7 @@ type tracerDef struct {
 	Map string
 }
 
-const tracersSecName = ".tracers"
+const snapshottersSecName = ".snapshotters"
 const mapsSecName = ".maps"
 
 func extractTracers(file *elf.File, btfSpec *btf.Spec) ([]tracerDef, error) {
@@ -262,49 +263,30 @@ func extractTracers(file *elf.File, btfSpec *btf.Spec) ([]tracerDef, error) {
 	//var mapsSec *elf.Section
 	var ds *btf.Datasec
 
-	//	for _, sec := range file.Sections //{
-	//		if strings.HasPrefix(sec.Name,// tracersSecName) {
-	//			tracersSec = se//c//
-	//		//}//
-	//		//if strings.HasPrefi//x(sec.Name,// mapsSecName) {
-	//		//	mapsSec = se//c//
-	//		//}//
-	//		//if tracersSec !=// ni//l && mapsSe//c != nil {
-	//		//	break//
-	//		//}//
-	//	}//
+	//	// do a first pass over the maps to find them
+	//	if err := btfSpec.TypeByName(mapsSecName, &ds); err != nil {
+	//		return nil, fmt.Errorf("cannot find section '%s' in BTF: %w", ".maps", err)
+	//	}
 	//
-	//	if tracersSec == nil {
-	//		return nil, fmt.Errorf("no .tracers section found in ELF file")
+	//	for _, vs := range ds.Vars {
+	//		v, ok := vs.Type.(*btf.Var)
+	//		if !ok {
+	//			return nil, fmt.Errorf("section %v: unexpected type %s", ".maps", vs.Type)
+	//		}
+	//		name := string(v.Name)
+	//
+	//		// Each Var representing a BTF map definition contains a Struct.
+	//		mapStruct, ok := btf.UnderlyingType(v.Type).(*btf.Struct)
+	//		if !ok {
+	//			return nil, fmt.Errorf("expected struct, got %s", v.Type)
+	//		}
+	//
+	//		mapsNames[uintptr(unsafe.Pointer(mapStruct))] = name
 	//	}
-	//	if mapsSec == nil {
-	//		return nil, fmt.Errorf("no .maps section found in ELF file")
-	//	}
-
-	// do a first pass over the maps to find them
-	if err := btfSpec.TypeByName(mapsSecName, &ds); err != nil {
-		return nil, fmt.Errorf("cannot find section '%s' in BTF: %w", ".maps", err)
-	}
-
-	for _, vs := range ds.Vars {
-		v, ok := vs.Type.(*btf.Var)
-		if !ok {
-			return nil, fmt.Errorf("section %v: unexpected type %s", ".maps", vs.Type)
-		}
-		name := string(v.Name)
-
-		// Each Var representing a BTF map definition contains a Struct.
-		mapStruct, ok := btf.UnderlyingType(v.Type).(*btf.Struct)
-		if !ok {
-			return nil, fmt.Errorf("expected struct, got %s", v.Type)
-		}
-
-		mapsNames[uintptr(unsafe.Pointer(mapStruct))] = name
-	}
 
 	// do a second pass over the tracers
-	if err := btfSpec.TypeByName(tracersSecName, &ds); err != nil {
-		return nil, fmt.Errorf("cannot find section '%s' in BTF: %w", tracersSecName, err)
+	if err := btfSpec.TypeByName(snapshottersSecName, &ds); err != nil {
+		return nil, fmt.Errorf("cannot find section '%s' in BTF: %w", snapshottersSecName, err)
 	}
 	for _, vs := range ds.Vars {
 		v, ok := vs.Type.(*btf.Var)
@@ -330,6 +312,14 @@ func extractTracers(file *elf.File, btfSpec *btf.Spec) ([]tracerDef, error) {
 			case "type":
 				vk := member.Type.(*btf.Pointer)
 				tracer.Type = btf.UnderlyingType(vk.Target)
+			case "program0":
+				fmt.Printf("program0: %+v\n", member.Type)
+				//vk := member.Type.(*btf.Pointer)
+				typ := btf.UnderlyingType(member.Type)
+				btfPointer := typ.(*btf.Pointer)
+				btfFuncProto := btfPointer.Target.(*btf.FuncProto)
+				fmt.Printf("program0 type: %+v\n", btfFuncProto)
+
 			}
 		}
 
@@ -342,11 +332,11 @@ func extractTracers(file *elf.File, btfSpec *btf.Spec) ([]tracerDef, error) {
 }
 
 func main() {
-	reader := bytes.NewReader(_HostBytes)
-	//reader, err := os.Open("/tmp/trace_open/amd64.bpf.o")
-	//if err != nil {
-	//	panic(fmt.Errorf("failed to open file: %w", err))
-	//}
+	//reader := bytes.NewReader(_HostBytes)
+	reader, err := os.Open("/tmp/trace_open/amd64.bpf.o")
+	if err != nil {
+		panic(fmt.Errorf("failed to open file: %w", err))
+	}
 
 	//file, err := elf.NewFile(reader)
 	//if err != nil {

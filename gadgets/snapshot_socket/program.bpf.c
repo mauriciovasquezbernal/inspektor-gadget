@@ -229,4 +229,12 @@ int ig_snap_udp(struct bpf_iter__udp *ctx)
 	return 0;
 }
 
+struct {
+	__type(type, struct socket_entry);
+	// TODO: how to add a list of things? (programs)
+	__type(program0, ig_snap_tcp);
+	__type(program1, ig_snap_udp);
+
+} sockets SEC(".snapshotters");
+
 char _license[] SEC("license") = "GPL";
