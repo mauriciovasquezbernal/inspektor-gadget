@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"os"
 	"sync"
-	"unsafe"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
@@ -86,7 +85,7 @@ func (i *ebpfInstance) populateTracers() error {
 		return fmt.Errorf("cannot find section '%s' in BTF: %w", tracersSecName, err)
 	}
 
-	mapsNames := make(map[uintptr]string)
+	mapsNames := make(map[btf.Type]string)
 	for _, vs := range mapsDs.Vars {
 		v, ok := vs.Type.(*btf.Var)
 		if !ok {
@@ -99,9 +98,7 @@ func (i *ebpfInstance) populateTracers() error {
 		if !ok {
 			return fmt.Errorf("expected struct, got %s", v.Type)
 		}
-
-		// TODO: can be avoid unsafe?
-		mapsNames[uintptr(unsafe.Pointer(mapStruct))] = name
+		mapsNames[mapStruct] = name
 	}
 
 	for _, vs := range tracersDs.Vars {
@@ -128,7 +125,7 @@ func (i *ebpfInstance) populateTracers() error {
 				btfPointer := member.Type.(*btf.Pointer)
 				target := btf.UnderlyingType(btfPointer.Target)
 				btfStruct := target.(*btf.Struct)
-				tracer.mapName = mapsNames[uintptr(unsafe.Pointer(btfStruct))]
+				tracer.mapName = mapsNames[btfStruct]
 			case "type":
 				vk := member.Type.(*btf.Pointer)
 				btfStruct = btf.UnderlyingType(vk.Target).(*btf.Struct)
