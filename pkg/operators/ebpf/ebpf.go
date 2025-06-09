@@ -236,11 +236,6 @@ func (i *ebpfInstance) analyze() error {
 			populateFunc: i.fixTracerMap,
 		},
 		{
-			prefixFunc:   hasPrefix(mapIterPrefix),
-			validator:    i.validateGlobalConstVoidPtrVar,
-			populateFunc: i.populateMapIter,
-		},
-		{
 			prefixFunc: func(s string) (string, bool) {
 				// Exceptions for backwards-compatibility
 				if s == gadgets.MntNsFilterMapName {
@@ -307,6 +302,9 @@ func (i *ebpfInstance) analyze() error {
 
 	if err := i.populateTracers(); err != nil {
 		return fmt.Errorf("populating tracers: %w", err)
+	}
+	if err := i.populateMapIters(); err != nil {
+		return fmt.Errorf("populating map iters: %w", err)
 	}
 	return nil
 }
