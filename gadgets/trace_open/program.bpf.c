@@ -22,6 +22,7 @@ struct args_t {
 	__u16 mode;
 };
 
+
 struct event {
 	gadget_timestamp timestamp_raw;
 	struct gadget_process proc;
@@ -33,6 +34,7 @@ struct event {
 	struct gadget_user_stack ustack;
 	char fname[NAME_MAX];
 };
+
 
 const volatile bool targ_failed = false;
 GADGET_PARAM(targ_failed);
@@ -46,7 +48,14 @@ struct {
 
 GADGET_TRACER_MAP(events, 1024 * 256);
 
-GADGET_TRACER(open, events, event);
+
+// TODO: for compiler to emit BTF for this, without this, the compiler emits a FWD declaration below taht messes everything up
+// Why it doesn't happen for map declarations?
+const struct event *__foo_var_foo __attribute__((unused));
+struct {
+	__type(type, struct event);
+	__type(map, events);
+} open SEC(".tracers");
 
 static __always_inline int trace_enter(const char *filename, int flags,
 				       __u16 mode)

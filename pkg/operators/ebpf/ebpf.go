@@ -221,11 +221,6 @@ func (i *ebpfInstance) loadSpec() error {
 func (i *ebpfInstance) analyze() error {
 	prefixLookups := []populateEntry{
 		{
-			prefixFunc:   hasPrefix(tracerInfoPrefix),
-			validator:    i.validateGlobalConstVoidPtrVar,
-			populateFunc: i.populateTracer,
-		},
-		{
 			prefixFunc:   hasPrefix(snapshottersPrefix),
 			validator:    i.validateGlobalConstVoidPtrVar,
 			populateFunc: i.populateSnapshotter,
@@ -308,6 +303,10 @@ func (i *ebpfInstance) analyze() error {
 		i.logger.Debugf("> attachType : %s", program.AttachType.String())
 		i.logger.Debugf("> sectionName: %s", program.SectionName)
 		i.logger.Debugf("> license    : %s", program.License)
+	}
+
+	if err := i.populateTracers(); err != nil {
+		return fmt.Errorf("populating tracers: %w", err)
 	}
 	return nil
 }

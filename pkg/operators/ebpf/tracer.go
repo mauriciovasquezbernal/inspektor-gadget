@@ -18,8 +18,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
+	"unsafe"
 
 	"github.com/cilium/ebpf"
 	"github.com/cilium/ebpf/btf"
@@ -68,46 +68,95 @@ func (i *ebpfInstance) fixTracerMap(t btf.Type, varName string) error {
 	return nil
 }
 
-func (i *ebpfInstance) populateTracer(t btf.Type, varName string) error {
-	i.logger.Debugf("populating tracer %q", varName)
+const tracersSecName = ".tracers"
+const mapsSecName = ".maps"
 
-	parts := strings.Split(varName, typeSplitter)
-	if len(parts) != 3 {
-		return fmt.Errorf("invalid tracer info: %q", varName)
+func (i *ebpfInstance) populateTracers() error {
+	var mapsDs *btf.Datasec
+	var tracersDs *btf.Datasec
+
+	if err := i.collectionSpec.Types.TypeByName(mapsSecName, &mapsDs); err != nil {
+		return fmt.Errorf("cannot find section '%s' in BTF: %w", mapsSecName, err)
+	}
+	if err := i.collectionSpec.Types.TypeByName(tracersSecName, &tracersDs); err != nil {
+		if errors.Is(err, btf.ErrNotFound) {
+			i.logger.Debugf("no tracers section found in BTF, skipping")
+			return nil
+		}
+		return fmt.Errorf("cannot find section '%s' in BTF: %w", tracersSecName, err)
 	}
 
-	name := parts[0]
-	mapName := parts[1]
-	structName := parts[2]
+	mapsNames := make(map[uintptr]string)
+	for _, vs := range mapsDs.Vars {
+		v, ok := vs.Type.(*btf.Var)
+		if !ok {
+			return fmt.Errorf("section %v: unexpected type %s", ".maps", vs.Type)
+		}
+		name := string(v.Name)
 
-	i.logger.Debugf("> name       : %q", name)
-	i.logger.Debugf("> map name   : %q", mapName)
-	i.logger.Debugf("> struct name: %q", structName)
+		// Each Var representing a BTF map definition contains a Struct.
+		mapStruct, ok := btf.UnderlyingType(v.Type).(*btf.Struct)
+		if !ok {
+			return fmt.Errorf("expected struct, got %s", v.Type)
+		}
 
-	tracerMap, ok := i.collectionSpec.Maps[mapName]
-	if !ok {
-		return fmt.Errorf("map %q not found in eBPF object", mapName)
+		// TODO: can be avoid unsafe?
+		mapsNames[uintptr(unsafe.Pointer(mapStruct))] = name
 	}
 
-	if err := validateTracerMap(tracerMap); err != nil {
-		return fmt.Errorf("trace map is invalid: %w", err)
-	}
+	for _, vs := range tracersDs.Vars {
+		v, ok := vs.Type.(*btf.Var)
+		if !ok {
+			return fmt.Errorf("section %v: unexpected type %s", ".maps", vs.Type)
+		}
 
-	var btfStruct *btf.Struct
-	if err := i.collectionSpec.Types.TypeByName(structName, &btfStruct); err != nil {
-		return fmt.Errorf("finding struct %q in eBPF object: %w", structName, err)
-	}
+		i.logger.Debugf("populating tracer %q", v.Name)
 
-	i.logger.Debugf("adding tracer %q", name)
-	i.tracers[name] = &Tracer{
-		mapName:    mapName,
-		structName: btfStruct.Name,
-		eventSize:  btfStruct.Size,
-	}
+		tracerStruct, ok := btf.UnderlyingType(v.Type).(*btf.Struct)
+		if !ok {
+			return fmt.Errorf("expected struct, got %s", v.Type)
+		}
 
-	err := i.populateStructDirect(btfStruct)
-	if err != nil {
-		return fmt.Errorf("populating struct %q for tracer %q: %w", btfStruct.Name, name, err)
+		tracer := Tracer{}
+		var btfStruct *btf.Struct
+		name := string(v.Name)
+
+		// TODO: add a few type assertions
+		for _, member := range tracerStruct.Members {
+			switch member.Name {
+			case "map":
+				btfPointer := member.Type.(*btf.Pointer)
+				target := btf.UnderlyingType(btfPointer.Target)
+				btfStruct := target.(*btf.Struct)
+				tracer.mapName = mapsNames[uintptr(unsafe.Pointer(btfStruct))]
+			case "type":
+				vk := member.Type.(*btf.Pointer)
+				btfStruct = btf.UnderlyingType(vk.Target).(*btf.Struct)
+				tracer.structName = btfStruct.Name
+			}
+		}
+
+		i.logger.Debugf("> name       : %q", name)
+		i.logger.Debugf("> map name   : %q", tracer.mapName)
+		i.logger.Debugf("> struct name: %q", tracer.structName)
+		i.tracers[name] = &tracer
+
+		err := i.populateStructDirect(btfStruct)
+		if err != nil {
+			return fmt.Errorf("populating struct %q for tracer %q: %w", btfStruct.Name, name, err)
+		}
+
+		// TODO: validate mandatory fields are set
+
+		tracerMap, ok := i.collectionSpec.Maps[tracer.mapName]
+		if !ok {
+			return fmt.Errorf("map %q not found in eBPF object", tracer.mapName)
+		}
+		if err := validateTracerMap(tracerMap); err != nil {
+			return fmt.Errorf("trace map is invalid: %w", err)
+		}
+
+		i.logger.Debugf("adding tracer %q", name)
 	}
 
 	return nil
