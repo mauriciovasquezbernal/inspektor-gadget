@@ -96,6 +96,8 @@ jobs:
         IMAGE_TAG: ${{ github.event.release.tag_name }}
         GADGET_TAG: ${{ github.event.release.tag_name }}
         GITHUB_TOKEN: ${{ github.token }}
+        CONTAINER_REPO_NAMESPACE: ghcr.io/${{ github.repository_owner }}
+        GADGET_REPOSITORY: ghcr.io/${{ github.repository_owner }}/gadget
       run: |
         LATEST_TAG=$(gh release list --limit 1000 --json tagName | jq -r '.[].tagName' | sort -V | tail -n1)
         echo "LATEST_TAG=$LATEST_TAG, CURRENT_IMAGE_TAG=$IMAGE_TAG"
